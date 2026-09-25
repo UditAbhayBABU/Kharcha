@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">KHARCHA</string>
+    <string name="shortcut_quick_add">Quick Add</string>
+    <string name="shortcut_quick_add_long">Jaldi Kharcha Jodo</string>
+    <string name="shortcut_udhaar">Udhaar Khata</string>
+    <string name="shortcut_udhaar_long">Udhaar Khata Dekho</string>
+    <string name="budget_warning_humorous">Iss mahine already bhot kharcha ho gaya MALIKK!</string>
+    <string name="excel_confirm_prompt">Excel par file khuli nahi hai na?</string>
+</resources>

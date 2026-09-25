@@ -1,0 +1,6 @@
+{
+  "name": "KHARCHA",
+  "description": "Elegant Dark Expense Manager with instant Quick Add, Firestore cloud sync, Udhaar ledger, Pots, Businesses, and Excel/Sheets mirror.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

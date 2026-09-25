@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="quick_add"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/shortcut_quick_add"
+        android:shortcutLongLabel="@string/shortcut_quick_add_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.udit.kharcha"
+            android:targetClass="com.example.MainActivity">
+            <extra android:name="shortcut_action" android:value="quick_add" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="udhaar"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/shortcut_udhaar"
+        android:shortcutLongLabel="@string/shortcut_udhaar_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.udit.kharcha"
+            android:targetClass="com.example.MainActivity">
+            <extra android:name="shortcut_action" android:value="udhaar" />
+        </intent>
+    </shortcut>
+</shortcuts>
