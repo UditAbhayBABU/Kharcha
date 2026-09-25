@@ -7,6 +7,7 @@ import com.example.data.model.*
 import com.example.data.remote.ExcelSyncManager
 import com.example.data.remote.ExcelSyncResult
 import com.example.data.remote.FirestoreSyncManager
+import com.example.data.remote.GoogleDriveAndSheetsService
 import com.example.data.remote.GoogleSheetsMirrorService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,7 @@ class KharchaRepository(
     private val dao: KharchaDao = KharchaDatabase.getInstance(context).kharchaDao(),
     private val firestoreSync: FirestoreSyncManager = FirestoreSyncManager(),
     private val sheetsMirror: GoogleSheetsMirrorService = GoogleSheetsMirrorService(),
+    private val driveService: GoogleDriveAndSheetsService = GoogleDriveAndSheetsService(),
     private val excelSync: ExcelSyncManager = ExcelSyncManager(context)
 ) {
     private val repoScope = CoroutineScope(Dispatchers.IO)
@@ -49,7 +51,14 @@ class KharchaRepository(
         return dao.getAllExpenses(userId).map { list -> list.map { it.toDomain() } }
     }
 
-    suspend fun addExpense(expense: Expense, sheetsUrl: String = "", autoSyncSheets: Boolean = true) {
+    suspend fun addExpense(
+        expense: Expense,
+        sheetsUrl: String = "",
+        autoSyncSheets: Boolean = true,
+        googleAccessToken: String = "",
+        sheetsSpreadsheetId: String = "",
+        sheetsWorksheetName: String = "KHARCHA"
+    ) {
         // 1. Immediately write to Room local DB (instant, zero delay, offline-first)
         val entity = ExpenseEntity.fromDomain(expense.copy(syncState = SyncState.PENDING_INSERT))
         dao.insertExpense(entity)
@@ -91,14 +100,30 @@ class KharchaRepository(
         }
 
         // 4. Asynchronously sync to Firestore and Sheets mirror
+        // A failure in Google Sheets or Excel must NEVER cause loss of the original expense
         repoScope.launch {
             try {
                 firestoreSync.syncPendingExpenses(expense.userId, dao)
-                if (autoSyncSheets && sheetsUrl.isNotBlank()) {
-                    sheetsMirror.mirrorPendingExpenses(expense.userId, sheetsUrl, dao)
+                if (autoSyncSheets) {
+                    if (googleAccessToken.isNotBlank() && sheetsSpreadsheetId.isNotBlank()) {
+                        val pending = dao.getPendingSheetsExpenses(expense.userId)
+                        if (pending.isNotEmpty()) {
+                            val res = driveService.appendExpensesToGoogleSheet(
+                                googleAccessToken,
+                                sheetsSpreadsheetId,
+                                sheetsWorksheetName,
+                                pending
+                            )
+                            if (res.isSuccess) {
+                                pending.forEach { dao.markExpenseSheetsSynced(it.id) }
+                            }
+                        }
+                    } else if (sheetsUrl.isNotBlank()) {
+                        sheetsMirror.mirrorPendingExpenses(expense.userId, sheetsUrl, dao)
+                    }
                 }
             } catch (e: Exception) {
-                Log.e("KharchaRepo", "Background sync error: ${e.message}")
+                Log.e("KharchaRepo", "Background sync non-blocking note: ${e.message}")
             }
         }
     }
@@ -247,7 +272,68 @@ class KharchaRepository(
         return sheetsMirror.mirrorPendingExpenses(userId, webhookUrl, dao)
     }
 
+    suspend fun syncGoogleSheetsDirect(
+        userId: String,
+        accessToken: String,
+        spreadsheetId: String,
+        sheetName: String = "KHARCHA"
+    ): Result<Int> {
+        val pending = dao.getPendingSheetsExpenses(userId)
+        if (pending.isEmpty()) return Result.success(0)
+        val res = driveService.appendExpensesToGoogleSheet(accessToken, spreadsheetId, sheetName, pending)
+        if (res.isSuccess) {
+            pending.forEach { dao.markExpenseSheetsSynced(it.id) }
+        }
+        return res
+    }
+
+    suspend fun listGoogleDriveFiles(accessToken: String): Result<List<DriveFileItem>> {
+        return driveService.listDriveFiles(accessToken)
+    }
+
+    suspend fun createKharchaWorkbookInDrive(accessToken: String, fileName: String): Result<DriveFileItem> {
+        return driveService.createKharchaWorkbookInDrive(accessToken, fileName)
+    }
+
     suspend fun syncExcel(userId: String): Result<ExcelSyncResult> {
+        return excelSync.performExcelSync(userId, dao)
+    }
+
+    suspend fun syncExcelWithGoogleDrive(
+        userId: String,
+        accessToken: String,
+        fileId: String,
+        sheetName: String = "KHARCHA"
+    ): Result<ExcelSyncResult> {
+        val pending = dao.getPendingExcelExpenses(userId)
+        if (pending.isEmpty()) {
+            return Result.success(
+                ExcelSyncResult(
+                    syncedCount = 0,
+                    totalPending = 0,
+                    message = "Sabhi transactions already Excel me synced hain."
+                )
+            )
+        }
+
+        if (accessToken.isNotBlank() && fileId.isNotBlank()) {
+            val driveRes = driveService.syncExpensesToDriveExcel(accessToken, fileId, sheetName, pending)
+            if (driveRes.isSuccess) {
+                pending.forEach { dao.markExpenseExcelSynced(it.id) }
+                // Also write to local backup workbook
+                excelSync.performExcelSync(userId, dao)
+                return Result.success(
+                    ExcelSyncResult(
+                        syncedCount = pending.size,
+                        totalPending = 0,
+                        message = "${pending.size} transactions Google Drive Excel workbook me jod diye gaye."
+                    )
+                )
+            } else {
+                Log.w("KharchaRepo", "Drive sync fallback: ${driveRes.exceptionOrNull()?.message}")
+            }
+        }
+
         return excelSync.performExcelSync(userId, dao)
     }
 

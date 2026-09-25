@@ -51,6 +51,7 @@ fun SettingsScreen(
     onNavigateToBudgets: () -> Unit,
     onNavigateToSheetsSync: () -> Unit,
     onNavigateToExcelSync: () -> Unit,
+    onNavigateToGoogleDriveAndSheets: () -> Unit,
     onNavigateToAdmin: () -> Unit,
     onSetPin: (String) -> Unit,
     onDisablePin: () -> Unit,
@@ -182,10 +183,10 @@ fun SettingsScreen(
                 }
             }
 
-            // MIRRORS & CLOUD EXCEL / SHEETS SECTION
+            // DEDICATED GOOGLE DRIVE & SHEETS SECTION
             item {
                 Text(
-                    text = "Cloud Sync & Mirrors",
+                    text = "Google Drive & Sheets",
                     fontSize = 13.sp,
                     color = TextSecondary,
                     fontWeight = FontWeight.Bold
@@ -198,6 +199,18 @@ fun SettingsScreen(
                         .background(SurfaceCard)
                         .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
                 ) {
+                    val isConnected = !userProfile?.googleAccountEmail.isNullOrBlank()
+                    SettingsItem(
+                        icon = Icons.Default.CloudSync,
+                        iconTint = if (isConnected) EmeraldCash else GoldPrimary,
+                        title = "Google Drive & Sheets",
+                        subtitle = if (isConnected)
+                            "Connected: ${userProfile?.googleAccountEmail}"
+                        else
+                            "Connect Google account for Drive & Sheets sync",
+                        onClick = onNavigateToGoogleDriveAndSheets
+                    )
+                    HorizontalDivider(color = BorderSubtle, thickness = 0.8.dp)
                     SettingsItem(
                         icon = Icons.Default.TableChart,
                         iconTint = EmeraldCash,

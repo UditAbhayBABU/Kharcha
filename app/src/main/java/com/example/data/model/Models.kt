@@ -145,6 +145,24 @@ data class UserProfile(
     val sheetsAutoSync: Boolean = true,
     val excelPreferredSyncTime: String = "02:00", // 24-hr time
     val lastExcelSyncMillis: Long = 0L,
+    val lastSheetsSyncMillis: Long = 0L,
     val pinHash: String = "",
-    val isPinLockEnabled: Boolean = false
+    val isPinLockEnabled: Boolean = false,
+    val googleAccountEmail: String = "",
+    val googleAccountName: String = "",
+    val googleAccessToken: String = "",
+    val sheetsSpreadsheetId: String = "",
+    val sheetsSpreadsheetName: String = "",
+    val sheetsWorksheetName: String = "KHARCHA",
+    val excelWorkbookId: String = "",
+    val excelWorkbookName: String = "",
+    val excelWorksheetName: String = "KHARCHA"
 )
+
+data class DriveFileItem(
+    val id: String,
+    val name: String,
+    val mimeType: String = "",
+    val modifiedTime: String = ""
+)
+

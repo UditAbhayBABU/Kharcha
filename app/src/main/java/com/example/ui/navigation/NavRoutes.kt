@@ -14,5 +14,6 @@ sealed class Screen(val route: String, val title: String) {
     object BudgetSettings : Screen("manage_budgets", "Monthly Budget")
     object SheetsSync : Screen("sheets_sync", "Google Sheets Mirror")
     object ExcelSync : Screen("excel_sync", "Excel Sync")
+    object GoogleDriveAndSheets : Screen("google_drive_sheets", "Google Drive & Sheets")
     object AdminPanel : Screen("admin_panel", "Admin Panel")
 }

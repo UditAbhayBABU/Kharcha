@@ -247,7 +247,9 @@ fun TactileNumberPad(
 fun HumorousBudgetDialog(
     categoryName: String,
     limit: Double,
-    currentSpent: Double,
+    alreadySpent: Double,
+    currentExpense: Double,
+    projectedSpent: Double,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -270,21 +272,33 @@ fun HumorousBudgetDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "“Iss mahine already bhot kharcha ho gaya MALIKK!”",
+                    text = "Iss mahine already bhot kharcha ho gaya MALIKK 😭",
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp,
                     color = GoldLight
                 )
                 Text(
-                    text = "$categoryName me limit ₹${limit.toInt()} thi, aur ab tak ₹${currentSpent.toInt()} kharch ho chuke hain!",
+                    text = "$categoryName: Monthly Budget ₹${limit.toInt()}",
                     fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Ab tak ka kharcha: ₹${alreadySpent.toInt()} + Yeh kharcha: ₹${currentExpense.toInt()} = Total: ₹${projectedSpent.toInt()}",
+                    fontSize = 13.sp,
                     color = TextSecondary
+                )
+                Text(
+                    text = "✓ Kharcha record ho chuka hai (KHARCHA kabhi entry nahi rokta).",
+                    fontSize = 12.sp,
+                    color = EmeraldCash,
+                    fontWeight = FontWeight.Medium
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Samajh Gaya Malikk", color = GoldPrimary, fontWeight = FontWeight.Bold)
+                Text("Theek Hai Malikk", color = GoldPrimary, fontWeight = FontWeight.Bold)
             }
         }
     )

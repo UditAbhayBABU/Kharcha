@@ -41,6 +41,7 @@ fun QuickAddScreen(
     pots: List<Pot>,
     udhaarParties: List<UdhaarParty>,
     budgets: List<CategoryBudget>,
+    allExpenses: List<Expense> = emptyList(),
     isBudgetFeatureEnabled: Boolean,
     onSaveExpense: (Expense) -> Unit,
     onNavigateBack: () -> Unit,
@@ -59,11 +60,13 @@ fun QuickAddScreen(
     var selectedPotId by remember { mutableStateOf<String?>(null) }
     var selectedUdhaarPartyId by remember { mutableStateOf<String?>(null) }
 
-    // Humorous Budget Alert State
+    // Humorous Budget Alert State (Informational warning ONLY — never blocks saving)
     var showBudgetWarningDialog by remember { mutableStateOf(false) }
     var exceededBudgetName by remember { mutableStateOf("") }
     var exceededBudgetLimit by remember { mutableStateOf(0.0) }
-    var exceededCurrentSpent by remember { mutableStateOf(0.0) }
+    var exceededAlreadySpent by remember { mutableStateOf(0.0) }
+    var exceededCurrentExpense by remember { mutableStateOf(0.0) }
+    var exceededProjectedSpent by remember { mutableStateOf(0.0) }
 
     // Keep selectedCategory valid if categories change
     LaunchedEffect(categories) {
@@ -443,13 +446,31 @@ fun QuickAddScreen(
                     val selectedUdhaar = udhaarParties.find { it.id == selectedUdhaarPartyId }
 
                     // Check monthly budget if enabled
+                    // Informational warning only: NEVER blocks saving or alters the expense.
                     if (isBudgetFeatureEnabled) {
                         val budget = budgets.find { it.categoryName == selectedCategory && it.isEnabled }
-                        if (budget != null && amountValue >= budget.monthlyLimit) {
-                            exceededBudgetName = selectedCategory
-                            exceededBudgetLimit = budget.monthlyLimit
-                            exceededCurrentSpent = amountValue
-                            showBudgetWarningDialog = true
+                        if (budget != null) {
+                            val cal = java.util.Calendar.getInstance()
+                            cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+                            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                            cal.set(java.util.Calendar.MINUTE, 0)
+                            cal.set(java.util.Calendar.SECOND, 0)
+                            cal.set(java.util.Calendar.MILLISECOND, 0)
+                            val monthStartMillis = cal.timeInMillis
+
+                            val alreadySpent = allExpenses
+                                .filter { it.category == selectedCategory && it.dateMillis >= monthStartMillis }
+                                .sumOf { it.amount }
+
+                            val projected = alreadySpent + amountValue
+                            if (projected > budget.monthlyLimit) {
+                                exceededBudgetName = selectedCategory
+                                exceededBudgetLimit = budget.monthlyLimit
+                                exceededAlreadySpent = alreadySpent
+                                exceededCurrentExpense = amountValue
+                                exceededProjectedSpent = projected
+                                showBudgetWarningDialog = true
+                            }
                         }
                     }
 
@@ -495,12 +516,14 @@ fun QuickAddScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // Humorous Budget Alert Dialog
+        // Humorous Budget Alert Dialog (Warning ONLY — expense is already saved!)
         if (showBudgetWarningDialog) {
             HumorousBudgetDialog(
                 categoryName = exceededBudgetName,
                 limit = exceededBudgetLimit,
-                currentSpent = exceededCurrentSpent,
+                alreadySpent = exceededAlreadySpent,
+                currentExpense = exceededCurrentExpense,
+                projectedSpent = exceededProjectedSpent,
                 onDismiss = { showBudgetWarningDialog = false }
             )
         }

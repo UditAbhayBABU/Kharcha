@@ -93,15 +93,18 @@ class AuthRepository(
     }
 
     suspend fun loadUserProfile(userId: String) {
+        if (userId.isBlank() || userId == "guest_user") return
+        val user = firebaseAuth.currentUser ?: return
+        if (user.uid != userId) return
+
         val profile = firestoreSync.getUserProfile(userId)
         if (profile != null) {
             _userProfile.value = profile
         } else {
-            val user = firebaseAuth.currentUser
             val newProfile = UserProfile(
                 uid = userId,
-                email = user?.email ?: "",
-                displayName = user?.displayName ?: ""
+                email = user.email ?: "",
+                displayName = user.displayName ?: ""
             )
             firestoreSync.saveUserProfile(newProfile)
             _userProfile.value = newProfile
@@ -111,6 +114,46 @@ class AuthRepository(
     suspend fun updateSheetsUrl(sheetsUrl: String, autoSync: Boolean) {
         val current = _userProfile.value ?: return
         val updated = current.copy(sheetsUrl = sheetsUrl, sheetsAutoSync = autoSync)
+        _userProfile.value = updated
+        firestoreSync.saveUserProfile(updated)
+    }
+
+    suspend fun connectGoogleDriveAccount(email: String, displayName: String, token: String) {
+        val current = _userProfile.value ?: return
+        val updated = current.copy(
+            googleAccountEmail = email,
+            googleAccountName = displayName,
+            googleAccessToken = token
+        )
+        _userProfile.value = updated
+        firestoreSync.saveUserProfile(updated)
+    }
+
+    suspend fun disconnectGoogleDriveAccount() {
+        val current = _userProfile.value ?: return
+        val updated = current.copy(
+            googleAccountEmail = "",
+            googleAccountName = "",
+            googleAccessToken = "",
+            excelWorkbookId = "",
+            excelWorkbookName = "",
+            sheetsSpreadsheetId = "",
+            sheetsSpreadsheetName = ""
+        )
+        _userProfile.value = updated
+        firestoreSync.saveUserProfile(updated)
+    }
+
+    suspend fun updateSelectedDriveExcel(fileId: String, fileName: String) {
+        val current = _userProfile.value ?: return
+        val updated = current.copy(excelWorkbookId = fileId, excelWorkbookName = fileName)
+        _userProfile.value = updated
+        firestoreSync.saveUserProfile(updated)
+    }
+
+    suspend fun updateSelectedSheetsId(spreadsheetId: String, spreadsheetName: String) {
+        val current = _userProfile.value ?: return
+        val updated = current.copy(sheetsSpreadsheetId = spreadsheetId, sheetsSpreadsheetName = spreadsheetName)
         _userProfile.value = updated
         firestoreSync.saveUserProfile(updated)
     }

@@ -14,7 +14,10 @@ class FirestoreSyncManager(
     private val tag = "FirestoreSyncManager"
 
     suspend fun syncPendingExpenses(userId: String, dao: KharchaDao): Result<Int> {
-        if (userId.isBlank()) return Result.failure(IllegalStateException("User not logged in"))
+        if (userId.isBlank() || userId == "guest_user") return Result.success(0)
+        val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            ?: return Result.success(0)
+        if (authUser.uid != userId) return Result.success(0)
 
         return try {
             val pendingExpenses = dao.getUnsyncedExpenses(userId)
@@ -46,6 +49,8 @@ class FirestoreSyncManager(
                         "udhaarPersonId" to (entity.udhaarPersonId ?: ""),
                         "udhaarPersonName" to (entity.udhaarPersonName ?: ""),
                         "receiptUrl" to (entity.receiptUrl ?: ""),
+                        "sheetsSynced" to entity.sheetsSynced,
+                        "excelSynced" to entity.excelSynced,
                         "createdAt" to entity.createdAt,
                         "updatedAt" to System.currentTimeMillis()
                     )
@@ -63,7 +68,10 @@ class FirestoreSyncManager(
     }
 
     suspend fun pullRemoteExpenses(userId: String, dao: KharchaDao): Result<Int> {
-        if (userId.isBlank()) return Result.failure(IllegalStateException("User not logged in"))
+        if (userId.isBlank() || userId == "guest_user") return Result.success(0)
+        val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            ?: return Result.success(0)
+        if (authUser.uid != userId) return Result.success(0)
 
         return try {
             val snapshot = firestore.collection("users")
@@ -88,6 +96,8 @@ class FirestoreSyncManager(
                 val udhaarPersonName = doc.getString("udhaarPersonName").takeIf { !it.isNullOrBlank() }
                 val receiptUrl = doc.getString("receiptUrl").takeIf { !it.isNullOrBlank() }
                 val createdAt = doc.getLong("createdAt") ?: dateMillis
+                val sheetsSynced = doc.getBoolean("sheetsSynced") ?: false
+                val excelSynced = doc.getBoolean("excelSynced") ?: false
 
                 ExpenseEntity(
                     id = id,
@@ -108,8 +118,8 @@ class FirestoreSyncManager(
                     createdAt = createdAt,
                     updatedAt = System.currentTimeMillis(),
                     syncState = SyncState.SYNCED.name,
-                    sheetsSynced = true,
-                    excelSynced = true
+                    sheetsSynced = sheetsSynced,
+                    excelSynced = excelSynced
                 )
             }
 
@@ -122,7 +132,7 @@ class FirestoreSyncManager(
     }
 
     suspend fun syncPots(userId: String, dao: KharchaDao) {
-        if (userId.isBlank()) return
+        if (userId.isBlank() || userId == "guest_user" || com.google.firebase.auth.FirebaseAuth.getInstance().currentUser == null) return
         try {
             val snapshot = firestore.collection("users")
                 .document(userId)
@@ -146,12 +156,12 @@ class FirestoreSyncManager(
                 dao.insertPot(com.example.data.local.PotEntity.fromDomain(pot))
             }
         } catch (e: Exception) {
-            Log.e(tag, "Sync pots error: ${e.message}")
+            Log.w(tag, "Sync pots note: ${e.message}")
         }
     }
 
     suspend fun savePotToCloud(pot: Pot) {
-        if (pot.userId.isBlank()) return
+        if (pot.userId.isBlank() || pot.userId == "guest_user" || com.google.firebase.auth.FirebaseAuth.getInstance().currentUser == null) return
         try {
             firestore.collection("users")
                 .document(pot.userId)
@@ -172,12 +182,12 @@ class FirestoreSyncManager(
                     SetOptions.merge()
                 ).await()
         } catch (e: Exception) {
-            Log.e(tag, "Save pot error: ${e.message}")
+            Log.w(tag, "Save pot note: ${e.message}")
         }
     }
 
     suspend fun syncBusinesses(userId: String, dao: KharchaDao) {
-        if (userId.isBlank()) return
+        if (userId.isBlank() || userId == "guest_user" || com.google.firebase.auth.FirebaseAuth.getInstance().currentUser == null) return
         try {
             val snapshot = firestore.collection("users")
                 .document(userId)
@@ -204,7 +214,7 @@ class FirestoreSyncManager(
     }
 
     suspend fun saveBusinessToCloud(business: Business) {
-        if (business.userId.isBlank()) return
+        if (business.userId.isBlank() || business.userId == "guest_user" || com.google.firebase.auth.FirebaseAuth.getInstance().currentUser == null) return
         try {
             firestore.collection("users")
                 .document(business.userId)
@@ -223,12 +233,12 @@ class FirestoreSyncManager(
                     SetOptions.merge()
                 ).await()
         } catch (e: Exception) {
-            Log.e(tag, "Save business error: ${e.message}")
+            Log.w(tag, "Save business note: ${e.message}")
         }
     }
 
     suspend fun syncUdhaar(userId: String, dao: KharchaDao) {
-        if (userId.isBlank()) return
+        if (userId.isBlank() || userId == "guest_user" || com.google.firebase.auth.FirebaseAuth.getInstance().currentUser == null) return
         try {
             val snapshot = firestore.collection("users")
                 .document(userId)
@@ -255,12 +265,12 @@ class FirestoreSyncManager(
                 dao.insertUdhaarParty(com.example.data.local.UdhaarPartyEntity.fromDomain(party))
             }
         } catch (e: Exception) {
-            Log.e(tag, "Sync udhaar error: ${e.message}")
+            Log.w(tag, "Sync udhaar note: ${e.message}")
         }
     }
 
     suspend fun saveUdhaarPartyToCloud(party: UdhaarParty) {
-        if (party.userId.isBlank()) return
+        if (party.userId.isBlank() || party.userId == "guest_user" || com.google.firebase.auth.FirebaseAuth.getInstance().currentUser == null) return
         try {
             firestore.collection("users")
                 .document(party.userId)
@@ -284,12 +294,12 @@ class FirestoreSyncManager(
                     SetOptions.merge()
                 ).await()
         } catch (e: Exception) {
-            Log.e(tag, "Save udhaar party error: ${e.message}")
+            Log.w(tag, "Save udhaar party note: ${e.message}")
         }
     }
 
     suspend fun saveUdhaarEntryToCloud(entry: UdhaarEntry) {
-        if (entry.userId.isBlank()) return
+        if (entry.userId.isBlank() || entry.userId == "guest_user" || com.google.firebase.auth.FirebaseAuth.getInstance().currentUser == null) return
         try {
             firestore.collection("users")
                 .document(entry.userId)
@@ -313,6 +323,10 @@ class FirestoreSyncManager(
     }
 
     suspend fun getUserProfile(userId: String): UserProfile? {
+        if (userId.isBlank() || userId == "guest_user") return null
+        val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return null
+        if (authUser.uid != userId) return null
+
         return try {
             val doc = firestore.collection("users").document(userId).get().await()
             if (!doc.exists()) return null
@@ -326,15 +340,30 @@ class FirestoreSyncManager(
                 sheetsAutoSync = doc.getBoolean("sheetsAutoSync") ?: true,
                 excelPreferredSyncTime = doc.getString("excelPreferredSyncTime") ?: "02:00",
                 lastExcelSyncMillis = doc.getLong("lastExcelSyncMillis") ?: 0L,
+                lastSheetsSyncMillis = doc.getLong("lastSheetsSyncMillis") ?: 0L,
                 pinHash = doc.getString("pinHash") ?: "",
-                isPinLockEnabled = doc.getBoolean("isPinLockEnabled") ?: false
+                isPinLockEnabled = doc.getBoolean("isPinLockEnabled") ?: false,
+                googleAccountEmail = doc.getString("googleAccountEmail") ?: "",
+                googleAccountName = doc.getString("googleAccountName") ?: "",
+                googleAccessToken = doc.getString("googleAccessToken") ?: "",
+                sheetsSpreadsheetId = doc.getString("sheetsSpreadsheetId") ?: "",
+                sheetsSpreadsheetName = doc.getString("sheetsSpreadsheetName") ?: "",
+                sheetsWorksheetName = doc.getString("sheetsWorksheetName") ?: "KHARCHA",
+                excelWorkbookId = doc.getString("excelWorkbookId") ?: "",
+                excelWorkbookName = doc.getString("excelWorkbookName") ?: "",
+                excelWorksheetName = doc.getString("excelWorksheetName") ?: "KHARCHA"
             )
         } catch (e: Exception) {
+            Log.w(tag, "Get user profile note: ${e.message}")
             null
         }
     }
 
     suspend fun saveUserProfile(profile: UserProfile) {
+        if (profile.uid.isBlank() || profile.uid == "guest_user") return
+        val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return
+        if (authUser.uid != profile.uid) return
+
         try {
             firestore.collection("users").document(profile.uid)
                 .set(
@@ -348,14 +377,44 @@ class FirestoreSyncManager(
                         "sheetsAutoSync" to profile.sheetsAutoSync,
                         "excelPreferredSyncTime" to profile.excelPreferredSyncTime,
                         "lastExcelSyncMillis" to profile.lastExcelSyncMillis,
+                        "lastSheetsSyncMillis" to profile.lastSheetsSyncMillis,
                         "pinHash" to profile.pinHash,
                         "isPinLockEnabled" to profile.isPinLockEnabled,
+                        "googleAccountEmail" to profile.googleAccountEmail,
+                        "googleAccountName" to profile.googleAccountName,
+                        "googleAccessToken" to profile.googleAccessToken,
+                        "sheetsSpreadsheetId" to profile.sheetsSpreadsheetId,
+                        "sheetsSpreadsheetName" to profile.sheetsSpreadsheetName,
+                        "sheetsWorksheetName" to profile.sheetsWorksheetName,
+                        "excelWorkbookId" to profile.excelWorkbookId,
+                        "excelWorkbookName" to profile.excelWorkbookName,
+                        "excelWorksheetName" to profile.excelWorksheetName,
                         "lastActiveMillis" to System.currentTimeMillis()
                     ),
                     SetOptions.merge()
                 ).await()
         } catch (e: Exception) {
-            Log.e(tag, "Save user profile error: ${e.message}")
+            Log.w(tag, "Save user profile note: ${e.message}")
+        }
+    }
+
+    suspend fun markExpenseSheetsSyncedInFirestore(userId: String, expenseId: String) {
+        try {
+            firestore.collection("users").document(userId)
+                .collection("expenses").document(expenseId)
+                .update("sheetsSynced", true).await()
+        } catch (e: Exception) {
+            Log.e(tag, "Mark sheets synced in firestore error: ${e.message}")
+        }
+    }
+
+    suspend fun markExpenseExcelSyncedInFirestore(userId: String, expenseId: String) {
+        try {
+            firestore.collection("users").document(userId)
+                .collection("expenses").document(expenseId)
+                .update("excelSynced", true).await()
+        } catch (e: Exception) {
+            Log.e(tag, "Mark excel synced in firestore error: ${e.message}")
         }
     }
 

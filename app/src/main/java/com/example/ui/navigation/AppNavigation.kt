@@ -59,9 +59,9 @@ fun AppNavigation(
     val userProfile by authRepo.userProfile.collectAsStateWithLifecycle()
     val isAppUnlocked by authRepo.isAppUnlocked.collectAsStateWithLifecycle()
 
-    val userId = currentUser?.uid ?: "guest_user"
+    val userId = currentUser?.uid ?: ""
 
-    // Seed default categories for this user if first time
+    // Seed default categories for this user once authenticated
     LaunchedEffect(userId) {
         if (userId.isNotBlank()) {
             kharchaRepo.seedDefaultCategories(userId)
@@ -172,13 +172,17 @@ fun AppNavigation(
                         pots = pots,
                         udhaarParties = udhaarParties,
                         budgets = budgets,
+                        allExpenses = expenses,
                         isBudgetFeatureEnabled = userProfile?.isBudgetFeatureEnabled == true,
                         onSaveExpense = { expense ->
                             coroutineScope.launch {
                                 kharchaRepo.addExpense(
                                     expense = expense,
                                     sheetsUrl = userProfile?.sheetsUrl ?: "",
-                                    autoSyncSheets = userProfile?.sheetsAutoSync ?: true
+                                    autoSyncSheets = userProfile?.sheetsAutoSync ?: true,
+                                    googleAccessToken = userProfile?.googleAccessToken ?: "",
+                                    sheetsSpreadsheetId = userProfile?.sheetsSpreadsheetId ?: "",
+                                    sheetsWorksheetName = userProfile?.sheetsWorksheetName ?: "KHARCHA"
                                 )
                             }
                         },
@@ -263,6 +267,7 @@ fun AppNavigation(
                         onNavigateToBudgets = { currentScreen = Screen.BudgetSettings },
                         onNavigateToSheetsSync = { currentScreen = Screen.SheetsSync },
                         onNavigateToExcelSync = { currentScreen = Screen.ExcelSync },
+                        onNavigateToGoogleDriveAndSheets = { currentScreen = Screen.GoogleDriveAndSheets },
                         onNavigateToAdmin = {
                             coroutineScope.launch {
                                 adminUsers = com.example.data.remote.FirestoreSyncManager().getAllUsersForAdmin()
@@ -377,6 +382,89 @@ fun AppNavigation(
                             }
                         },
                         isSyncing = isSyncing,
+                        onNavigateBack = { currentScreen = Screen.Settings }
+                    )
+                }
+
+                Screen.GoogleDriveAndSheets -> {
+                    BackHandler { currentScreen = Screen.Settings }
+                    GoogleDriveAndSheetsScreen(
+                        userProfile = userProfile,
+                        pendingExcelCount = pendingExcelCount,
+                        pendingSheetsCount = pendingSheetsCount,
+                        onConnectGoogleAccount = { email, displayName, token ->
+                            coroutineScope.launch {
+                                authRepo.connectGoogleDriveAccount(email, displayName, token)
+                            }
+                        },
+                        onDisconnectGoogleAccount = {
+                            coroutineScope.launch {
+                                authRepo.disconnectGoogleDriveAccount()
+                            }
+                        },
+                        onSelectDriveFile = { fileId, fileName ->
+                            coroutineScope.launch {
+                                authRepo.updateSelectedDriveExcel(fileId, fileName)
+                            }
+                        },
+                        onSelectSheetsSpreadsheet = { id, name ->
+                            coroutineScope.launch {
+                                authRepo.updateSelectedSheetsId(id, name)
+                            }
+                        },
+                        onSaveSheetsWebhookUrl = { url, auto ->
+                            coroutineScope.launch {
+                                authRepo.updateSheetsUrl(url, auto)
+                            }
+                        },
+                        onSaveExcelSyncTime = { time ->
+                            coroutineScope.launch {
+                                authRepo.updateExcelSyncPreference(time)
+                            }
+                        },
+                        onFetchDriveFiles = { token ->
+                            kharchaRepo.listGoogleDriveFiles(token)
+                        },
+                        onCreateDriveWorkbook = { token, name ->
+                            kharchaRepo.createKharchaWorkbookInDrive(token, name)
+                        },
+                        onTriggerSheetsSync = {
+                            isSyncing = true
+                            coroutineScope.launch {
+                                val token = userProfile?.googleAccessToken.orEmpty()
+                                val sheetId = userProfile?.sheetsSpreadsheetId.orEmpty()
+                                val res = if (token.isNotBlank() && sheetId.isNotBlank()) {
+                                    kharchaRepo.syncGoogleSheetsDirect(userId, token, sheetId)
+                                } else {
+                                    kharchaRepo.syncGoogleSheets(userId, userProfile?.sheetsUrl.orEmpty())
+                                }
+                                isSyncing = false
+                                res.onSuccess {
+                                    Toast.makeText(context, "$it records Google Sheets me sync ho gaye!", Toast.LENGTH_SHORT).show()
+                                }
+                                res.onFailure {
+                                    Toast.makeText(context, it.message ?: "Sheets sync error", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onTriggerExcelSync = {
+                            isSyncing = true
+                            coroutineScope.launch {
+                                val token = userProfile?.googleAccessToken.orEmpty()
+                                val fileId = userProfile?.excelWorkbookId.orEmpty()
+                                val res = kharchaRepo.syncExcelWithGoogleDrive(userId, token, fileId)
+                                isSyncing = false
+                                res.onSuccess {
+                                    authRepo.recordExcelSyncCompleted()
+                                    Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
+                                }
+                                res.onFailure {
+                                    Toast.makeText(context, it.message ?: "Excel sync fail hua", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        isSyncingSheets = isSyncing,
+                        isSyncingExcel = isSyncing,
                         onNavigateBack = { currentScreen = Screen.Settings }
                     )
                 }
