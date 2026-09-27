@@ -15,11 +15,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -59,6 +61,11 @@ fun QuickAddScreen(
     var note by remember { mutableStateOf("") }
     var selectedPotId by remember { mutableStateOf<String?>(null) }
     var selectedUdhaarPartyId by remember { mutableStateOf<String?>(null) }
+
+    // 2.5s Cute Check Celebration Animation State
+    var showSuccessCelebration by remember { mutableStateOf(false) }
+    var savedSuccessAmount by remember { mutableStateOf(0.0) }
+    var savedSuccessCategory by remember { mutableStateOf("") }
 
     // Humorous Budget Alert State (Informational warning ONLY — never blocks saving)
     var showBudgetWarningDialog by remember { mutableStateOf(false) }
@@ -120,74 +127,88 @@ fun QuickAddScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
 
-            // 1. AMOUNT DISPLAY (Bold Tactile Card)
+            // 1. AMOUNT DISPLAY (Modern Dark Glossy Glassmorphic Card)
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.5.dp, BorderGlow, RoundedCornerShape(20.dp)),
+                    .border(1.5.dp, MetallicRimBrush, RoundedCornerShape(22.dp)),
                 color = SurfaceElevated,
-                shape = RoundedCornerShape(20.dp),
-                shadowElevation = 6.dp
+                shape = RoundedCornerShape(22.dp),
+                shadowElevation = 8.dp
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 18.dp, horizontal = 20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Kitna Kharch Hua?",
-                        color = TextSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "₹",
-                            fontSize = 34.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldPrimary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (amountString.isEmpty()) "0" else amountString,
-                            fontSize = 42.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (amountString.isEmpty()) TextMuted else TextPrimary,
-                            maxLines = 1
-                        )
-                    }
-
-                    // Fast Preset Quick Amount Chips (+50, +100, +200, +500, +2000)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
+                Box {
+                    // Top edge specular glass gloss
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(50, 100, 200, 500, 1000, 2000).forEach { preset ->
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceDark)
-                                    .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        val current = amountString.toDoubleOrNull() ?: 0.0
-                                        amountString = (current + preset).toInt().toString()
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "+₹$preset",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = AmberVibrant
+                            .height(1.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color.Transparent, GlassRimTop, Color.Transparent)
                                 )
+                            )
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 20.dp, horizontal = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Kitna Kharch Hua?",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "₹",
+                                fontSize = 34.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldPrimary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (amountString.isEmpty()) "0" else amountString,
+                                fontSize = 44.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (amountString.isEmpty()) TextMuted else TextPrimary,
+                                maxLines = 1
+                            )
+                        }
+
+                        // Fast Preset Quick Amount Chips (+50, +100, +200, +500, +1000, +2000)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(50, 100, 200, 500, 1000, 2000).forEach { preset ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Brush.verticalGradient(listOf(SurfaceDark, Color(0xFF090C12))))
+                                        .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            val current = amountString.toDoubleOrNull() ?: 0.0
+                                            amountString = (current + preset).toInt().toString()
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                                ) {
+                                    Text(
+                                        text = "+₹$preset",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AmberVibrant
+                                    )
+                                }
                             }
                         }
                     }
@@ -206,7 +227,7 @@ fun QuickAddScreen(
                         selectedContext = ContextType.PERSONAL
                         selectedBusinessId = null
                     },
-                    icon = Icons.Default.Person,
+                    icon = Icons.Outlined.Person,
                     accentColor = GoldPrimary,
                     modifier = Modifier.weight(1f)
                 )
@@ -223,7 +244,7 @@ fun QuickAddScreen(
                                 selectedBusinessId = businesses.firstOrNull()?.id
                             }
                         },
-                        icon = Icons.Default.Business,
+                        icon = Icons.Outlined.Business,
                         accentColor = BlueBank,
                         modifier = Modifier.weight(1f)
                     )
@@ -492,16 +513,11 @@ fun QuickAddScreen(
                     )
 
                     onSaveExpense(expense)
-                    coroutineScope.launch {
-                        val result = snackbarHostState.showSnackbar(
-                            message = "Kharcha ₹${expense.amount.toInt()} jud gaya!",
-                            actionLabel = "Peeche jao",
-                            duration = SnackbarDuration.Short
-                        )
-                        if (result == SnackbarResult.ActionPerformed) {
-                            onNavigateBack()
-                        }
-                    }
+
+                    // Trigger cute 2.5s celebration animation
+                    savedSuccessAmount = expense.amount
+                    savedSuccessCategory = expense.category
+                    showSuccessCelebration = true
 
                     // Reset for next entry
                     amountString = ""
@@ -514,6 +530,18 @@ fun QuickAddScreen(
             )
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // Cute 2.5s Check Success Celebration Overlay
+        if (showSuccessCelebration) {
+            CuteCheckSuccessAnimation(
+                amount = savedSuccessAmount,
+                categoryName = savedSuccessCategory,
+                onFinished = {
+                    showSuccessCelebration = false
+                    onNavigateBack()
+                }
+            )
         }
 
         // Humorous Budget Alert Dialog (Warning ONLY — expense is already saved!)

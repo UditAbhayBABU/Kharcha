@@ -1,6 +1,7 @@
 package com.example.ui.screens.history
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,11 +14,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -250,6 +253,53 @@ fun HistoryScreen(
                 }
             }
 
+            // GLOSSY HERO SUMMARY CARD
+            val totalFilteredAmount = remember(filteredExpenses) { filteredExpenses.sumOf { it.amount } }
+            KharchaCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                isGlossy = true,
+                backgroundColor = SurfaceElevated
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Kul Kharcha (Total)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "₹${totalFilteredAmount.toInt()}",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = GoldLight,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
+                    Surface(
+                        color = GoldPrimary.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = "${filteredExpenses.size} transactions",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldPrimary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(4.dp))
 
             // LIST OF EXPENSES
@@ -314,6 +364,20 @@ fun HistoryScreen(
     }
 }
 
+fun getCategoryIcon(name: String): androidx.compose.ui.graphics.vector.ImageVector {
+    val lower = name.lowercase()
+    return when {
+        lower.contains("khana") || lower.contains("peena") || lower.contains("food") -> Icons.Outlined.Restaurant
+        lower.contains("safar") || lower.contains("travel") || lower.contains("petrol") -> Icons.Outlined.DirectionsCar
+        lower.contains("bill") || lower.contains("recharge") -> Icons.Outlined.Receipt
+        lower.contains("kirana") || lower.contains("ration") -> Icons.Outlined.ShoppingCart
+        lower.contains("shopping") -> Icons.Outlined.ShoppingBag
+        lower.contains("office") || lower.contains("kaam") -> Icons.Outlined.BusinessCenter
+        lower.contains("dawai") || lower.contains("doctor") || lower.contains("health") -> Icons.Outlined.LocalHospital
+        else -> Icons.Outlined.Payments
+    }
+}
+
 @Composable
 fun ExpenseListItem(
     expense: Expense,
@@ -322,34 +386,36 @@ fun ExpenseListItem(
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp)),
-        color = SurfaceCard,
-        shape = RoundedCornerShape(16.dp),
-        shadowElevation = 2.dp
+    KharchaCard(
+        modifier = Modifier.fillMaxWidth(),
+        isGlossy = true,
+        backgroundColor = SurfaceCard
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Category Icon Badge
+            // Category Icon Badge with gentle glowing background
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
-                    .background(SurfaceElevated)
-                    .border(1.dp, BorderMedium, CircleShape),
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                GoldPrimary.copy(alpha = 0.25f),
+                                SurfaceElevated
+                            )
+                        )
+                    )
+                    .border(1.2.dp, GoldPrimary.copy(alpha = 0.4f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.AccountBalanceWallet,
+                    imageVector = getCategoryIcon(expense.category),
                     contentDescription = null,
                     tint = GoldPrimary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
@@ -428,8 +494,9 @@ fun ExpenseListItem(
                 Text(
                     text = "₹${expense.amount.toInt()}",
                     color = TextPrimary,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.3.sp
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {

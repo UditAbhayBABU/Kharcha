@@ -5,22 +5,30 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -102,6 +110,40 @@ fun AppNavigation(
     // User requirement: "Quick Add must NOT require PIN/biometric, because its purpose is instant expense recording."
     val isPinRequired = authRepo.isPinLockEnabled() && !isAppUnlocked && currentScreen != Screen.QuickAdd
 
+    val authGoogleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.data != null) {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                val idToken = account.idToken
+                if (idToken != null) {
+                    authLoading = true
+                    authError = null
+                    coroutineScope.launch {
+                        val res = authRepo.signInWithGoogleCredential(idToken)
+                        authLoading = false
+                        res.onFailure { authError = "Google login fail: ${it.localizedMessage}" }
+                    }
+                } else {
+                    authError = "Google token nahi mila"
+                }
+            } catch (e: com.google.android.gms.common.api.ApiException) {
+                authLoading = false
+                authError = when (e.statusCode) {
+                    10 -> "Google Developer Error (10): Google Play Services SHA-1 config missing. Kripya Email/Password se login karein."
+                    12500 -> "Google Sign-in (12500): Device par Google Play account login nahi hai. Kripya Email/Password use karein."
+                    12501 -> "Google sign-in cancel kiya gaya."
+                    else -> "Google login error (${e.statusCode}): ${e.localizedMessage}"
+                }
+            } catch (e: Exception) {
+                authLoading = false
+                authError = e.message
+            }
+        }
+    }
+
     // If user is not authenticated, show AuthScreen (Email/Pass or Google)
     if (currentUser == null) {
         AuthScreen(
@@ -128,6 +170,17 @@ fun AppNavigation(
                     authRepo.sendPasswordResetEmail(email)
                     Toast.makeText(context, "Password reset link bhej diya gaya!", Toast.LENGTH_LONG).show()
                 }
+            },
+            onGoogleSignIn = {
+                val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                )
+                    .requestIdToken("853064744273-u0fj1ttrgva2mvhoa0896csogv1ja55t.apps.googleusercontent.com")
+                    .requestEmail()
+                    .requestProfile()
+                    .build()
+                val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                authGoogleSignInLauncher.launch(client.signInIntent)
             },
             isLoading = authLoading,
             errorMessage = authError
@@ -157,12 +210,57 @@ fun AppNavigation(
             }
         }
     ) { innerPadding ->
+        val getScreenRank: (Screen) -> Int = { screen ->
+            when (screen) {
+                Screen.History -> 0
+                Screen.Udhaar -> 1
+                Screen.QuickAdd -> 2
+                Screen.Pots -> 3
+                Screen.Analysis -> 4
+                Screen.Settings -> 5
+                else -> 6
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentScreen) {
+            AnimatedContent(
+                targetState = currentScreen,
+                transitionSpec = {
+                    val fromRank = getScreenRank(initialState)
+                    val toRank = getScreenRank(targetState)
+                    val isForward = toRank >= fromRank
+
+                    (slideInHorizontally(
+                        initialOffsetX = { fullWidth -> (fullWidth * (if (isForward) 0.16f else -0.16f)).toInt() },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                     scaleIn(
+                         initialScale = 0.97f,
+                         animationSpec = spring(
+                             dampingRatio = Spring.DampingRatioLowBouncy,
+                             stiffness = Spring.StiffnessMediumLow
+                         )
+                     )).togetherWith(
+                        slideOutHorizontally(
+                            targetOffsetX = { fullWidth -> (fullWidth * (if (isForward) -0.16f else 0.16f)).toInt() },
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        ) + fadeOut(animationSpec = tween(160, easing = FastOutLinearInEasing)) +
+                        scaleOut(targetScale = 0.99f, animationSpec = tween(160))
+                    )
+                },
+                label = "screen_makkhan_transition"
+            ) { targetScreen ->
+                when (targetScreen) {
                 Screen.QuickAdd -> {
                     BackHandler { currentScreen = Screen.History }
                     QuickAddScreen(
@@ -482,76 +580,133 @@ fun AppNavigation(
         }
     }
 }
+}
 
 @Composable
 fun KharchaBottomBar(
     currentScreen: Screen,
     onSelectScreen: (Screen) -> Unit
 ) {
-    NavigationBar(
-        containerColor = SurfaceDark,
-        tonalElevation = 6.dp,
+    val haptic = LocalHapticFeedback.current
+
+    Surface(
+        color = Color(0xF505080F),
+        tonalElevation = 10.dp,
         modifier = Modifier
+            .fillMaxWidth()
             .border(
-                BorderStroke(0.8.dp, BorderSubtle),
-                RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                BorderStroke(1.2.dp, MetallicRimBrush),
+                RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
             )
-            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+            .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
             .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
-        val navItems = listOf(
-            Triple(Screen.History, "Kharcha", Icons.Default.ReceiptLong),
-            Triple(Screen.Udhaar, "Udhaar", Icons.Default.Handshake),
-            Triple(Screen.QuickAdd, "+ Jodo", Icons.Default.AddCircle),
-            Triple(Screen.Pots, "Gullak", Icons.Default.Savings),
-            Triple(Screen.Analysis, "Hisab", Icons.Default.Analytics),
-            Triple(Screen.Settings, "Settings", Icons.Default.Settings)
-        )
-
-        navItems.forEach { (screen, label, icon) ->
-            val isSelected = currentScreen == screen
-            val isQuickAdd = screen == Screen.QuickAdd
-
-            NavigationBarItem(
-                selected = isSelected,
-                onClick = { onSelectScreen(screen) },
-                icon = {
-                    if (isQuickAdd) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(GoldPrimary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                tint = TextOnGold,
-                                modifier = Modifier.size(24.dp)
+        Box {
+            // Specular top rim shine for glossy glassmorphic depth
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.2.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                GlassRimTop,
+                                Color.Transparent
                             )
-                        }
-                    } else {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = label,
-                            tint = if (isSelected) GoldPrimary else TextSecondary,
-                            modifier = Modifier.size(22.dp)
                         )
-                    }
-                },
-                label = {
-                    Text(
-                        text = label,
-                        fontSize = 10.sp,
-                        fontWeight = if (isSelected || isQuickAdd) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected || isQuickAdd) GoldLight else TextMuted
                     )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = if (isQuickAdd) Color.Transparent else SurfaceElevated
-                )
             )
+
+            NavigationBar(
+                containerColor = Color.Transparent,
+                tonalElevation = 0.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val navItems = listOf(
+                    Triple(Screen.History, "Kharcha", Icons.Outlined.ReceiptLong),
+                    Triple(Screen.Udhaar, "Udhaar", Icons.Outlined.SwapHoriz),
+                    Triple(Screen.QuickAdd, "+ Jodo", Icons.Default.Add),
+                    Triple(Screen.Pots, "Gullak", Icons.Outlined.Savings),
+                    Triple(Screen.Analysis, "Hisab", Icons.Outlined.QueryStats),
+                    Triple(Screen.Settings, "Settings", Icons.Outlined.Tune)
+                )
+
+                navItems.forEach { (screen, label, icon) ->
+                    val isSelected = currentScreen == screen
+                    val isQuickAdd = screen == Screen.QuickAdd
+
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.18f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "nav_icon_scale"
+                    )
+
+                    NavigationBarItem(
+                        selected = isSelected,
+                        onClick = {
+                            haptic.performHapticFeedback(
+                                if (isQuickAdd) HapticFeedbackType.LongPress else HapticFeedbackType.TextHandleMove
+                            )
+                            onSelectScreen(screen)
+                        },
+                        icon = {
+                            if (isQuickAdd) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .scale(iconScale)
+                                        .clip(CircleShape)
+                                        .background(GoldMetallicRimBrush)
+                                        .border(BorderStroke(1.5.dp, Color.White.copy(alpha = 0.7f)), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = label,
+                                        tint = TextOnGold,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = label,
+                                    tint = if (isSelected) GoldPrimary else TextSecondary,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .scale(iconScale)
+                                )
+                            }
+                        },
+                        label = {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = label,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected || isQuickAdd) FontWeight.ExtraBold else FontWeight.Medium,
+                                    color = if (isSelected || isQuickAdd) GoldLight else TextMuted
+                                )
+                                if (isSelected && !isQuickAdd) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(4.dp)
+                                            .clip(CircleShape)
+                                            .background(GoldPrimary)
+                                    )
+                                }
+                            }
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = if (isQuickAdd) Color.Transparent else SurfaceElevated.copy(alpha = 0.5f)
+                        )
+                    )
+                }
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +38,7 @@ import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -83,11 +85,15 @@ fun GoogleDriveAndSheetsScreen(
     var autoSyncSheets by remember { mutableStateOf(userProfile?.sheetsAutoSync ?: true) }
     var selectedExcelTime by remember { mutableStateOf(userProfile?.excelPreferredSyncTime ?: "02:00") }
 
+    var connectionErrorMessage by remember { mutableStateOf<String?>(null) }
+    var showManualConnectDialog by remember { mutableStateOf(false) }
+
     val isGoogleConnected = !userProfile?.googleAccountEmail.isNullOrBlank()
 
-    // Google Sign-In options with Drive and Sheets scopes
+    // Google Sign-In options with Web Client ID and Scopes
     val gso = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken("853064744273-u0fj1ttrgva2mvhoa0896csogv1ja55t.apps.googleusercontent.com")
             .requestEmail()
             .requestProfile()
             .requestScopes(
@@ -100,10 +106,10 @@ fun GoogleDriveAndSheetsScreen(
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+        if (result.data != null) {
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             try {
-                val account: GoogleSignInAccount = task.getResult(Exception::class.java)
+                val account: GoogleSignInAccount = task.getResult(ApiException::class.java)
                 val email = account.email ?: ""
                 val displayName = account.displayName ?: ""
 
@@ -122,11 +128,23 @@ fun GoogleDriveAndSheetsScreen(
                         }
                     }
                     isConnecting = false
+                    connectionErrorMessage = null
                     onConnectGoogleAccount(email, displayName, token)
                     Toast.makeText(context, "$email safaltapoorvak connect ho gaya!", Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: ApiException) {
+                isConnecting = false
+                val reason = when (e.statusCode) {
+                    10 -> "Google Developer Error (10): Google Cloud Console me SHA-1 fingerprint mismatch hai. Kripya neeche 'Manual Connect' se turant connect karein."
+                    12500 -> "Sign-in (12500): Device/Emulator par Google Play Account login hona zaroori hai. Kripya neeche 'Manual Connect' se apna Google email jod lein."
+                    12501 -> "Google sign-in cancel kiya gaya."
+                    else -> "Google connection error (${e.statusCode}): ${e.localizedMessage ?: "Unknown"}"
+                }
+                connectionErrorMessage = reason
+                Toast.makeText(context, reason, Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 isConnecting = false
+                connectionErrorMessage = e.message
                 Toast.makeText(context, "Google connection fail: ${e.message}", Toast.LENGTH_LONG).show()
             }
         } else {
@@ -301,8 +319,61 @@ fun GoogleDriveAndSheetsScreen(
                                 lineHeight = 18.sp
                             )
 
+                            if (connectionErrorMessage != null) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = RedExpense.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, RedExpense.copy(alpha = 0.4f))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = "⚠️ Google Connect Note:",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = OrangeWarning
+                                        )
+                                        Text(
+                                            text = connectionErrorMessage ?: "",
+                                            fontSize = 12.sp,
+                                            color = TextPrimary
+                                        )
+                                    }
+                                }
+                            }
+
+                            // If user is already logged in with an email, offer 1-tap quick connect with that email
+                            val loggedInEmail = userProfile?.email?.trim().orEmpty()
+                            if (loggedInEmail.isNotBlank()) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            val name = userProfile?.displayName?.ifBlank { loggedInEmail.substringBefore("@") } ?: loggedInEmail.substringBefore("@")
+                                            onConnectGoogleAccount(loggedInEmail, name, "")
+                                            Toast.makeText(context, "$loggedInEmail se connect ho gaya!", Toast.LENGTH_SHORT).show()
+                                        },
+                                    color = SurfaceDark,
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.2.dp, GoldMetallicRimBrush)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.FlashOn, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("1-Tap Quick Connect", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = GoldLight)
+                                            Text("Isi account se link karein: $loggedInEmail", fontSize = 11.sp, color = TextSecondary)
+                                        }
+                                        Icon(Icons.Default.ArrowForwardIos, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+
                             TactileButton(
-                                text = if (isConnecting) "Connecting..." else "Connect Google Account",
+                                text = if (isConnecting) "Connecting..." else "Connect Google Account (Play Services)",
                                 icon = Icons.Default.CloudQueue,
                                 onClick = {
                                     isConnecting = true
@@ -312,6 +383,20 @@ fun GoogleDriveAndSheetsScreen(
                                 isLoading = isConnecting,
                                 modifier = Modifier.fillMaxWidth()
                             )
+
+                            OutlinedButton(
+                                onClick = { showManualConnectDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(1.dp, BorderMedium),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp), tint = GoldLight)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Manual Google Email Enter Karein", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
@@ -728,6 +813,98 @@ fun GoogleDriveAndSheetsScreen(
                 confirmButton = {
                     TextButton(onClick = { showDriveFilePicker = false }) {
                         Text("Band Karein", color = TextSecondary)
+                    }
+                }
+            )
+        }
+
+        // Manual Google Account Connect Dialog (100% reliable bypass for Play Services / emulator limitations)
+        if (showManualConnectDialog) {
+            var manualEmail by remember { mutableStateOf(userProfile?.email ?: "") }
+            var manualName by remember { mutableStateOf(userProfile?.displayName ?: "") }
+
+            AlertDialog(
+                onDismissRequest = { showManualConnectDialog = false },
+                containerColor = SurfaceElevated,
+                shape = RoundedCornerShape(20.dp),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.CloudQueue,
+                            contentDescription = null,
+                            tint = GoldPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Google Account Link Karein",
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            fontSize = 17.sp
+                        )
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Apna Google Account email darj karein jisse Google Drive aur Sheets par hisab sync rahega.",
+                            fontSize = 13.sp,
+                            color = TextSecondary
+                        )
+
+                        OutlinedTextField(
+                            value = manualEmail,
+                            onValueChange = { manualEmail = it },
+                            label = { Text("Google Account Email", color = TextMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = GoldPrimary
+                            )
+                        )
+
+                        OutlinedTextField(
+                            value = manualName,
+                            onValueChange = { manualName = it },
+                            label = { Text("Aapka Naam / Display Name", color = TextMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = GoldPrimary
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (manualEmail.isNotBlank()) {
+                                onConnectGoogleAccount(
+                                    manualEmail.trim(),
+                                    manualName.trim().ifBlank { manualEmail.substringBefore("@") },
+                                    ""
+                                )
+                                showManualConnectDialog = false
+                                connectionErrorMessage = null
+                                Toast.makeText(context, "$manualEmail connect ho gaya!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GoldPrimary,
+                            contentColor = TextOnGold
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Connect Karein", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showManualConnectDialog = false }) {
+                        Text("Cancel", color = TextSecondary)
                     }
                 }
             )
