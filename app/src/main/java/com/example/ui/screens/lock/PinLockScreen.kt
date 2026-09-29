@@ -123,7 +123,7 @@ fun PinLockScreen(
 
             // Quick Add Shortcut Button directly on Lock Screen
             TactileButton(
-                text = "Jaldi Kharcha Jodo (No PIN)",
+                text = "Add Expense (No PIN)",
                 icon = Icons.Default.Add,
                 onClick = onOpenQuickAdd,
                 isPrimary = false,

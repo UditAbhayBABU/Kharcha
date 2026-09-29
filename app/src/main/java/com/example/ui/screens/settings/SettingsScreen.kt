@@ -183,10 +183,10 @@ fun SettingsScreen(
                 }
             }
 
-            // DEDICATED GOOGLE DRIVE & SHEETS SECTION
+            // CLOUD BACKUP & EXPORT SECTION (CLEAN APPLE INSET GROUP)
             item {
                 Text(
-                    text = "Google Drive & Sheets",
+                    text = "Cloud Backup & Export",
                     fontSize = 13.sp,
                     color = TextSecondary,
                     fontWeight = FontWeight.Bold
@@ -199,32 +199,26 @@ fun SettingsScreen(
                         .background(SurfaceCard)
                         .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
                 ) {
-                    val isConnected = !userProfile?.googleAccountEmail.isNullOrBlank()
+                    val isConnected = !userProfile?.googleAccountEmail.isNullOrBlank() || !userProfile?.sheetsUrl.isNullOrBlank()
                     SettingsItem(
                         icon = Icons.Default.CloudSync,
                         iconTint = if (isConnected) EmeraldCash else GoldPrimary,
-                        title = "Google Drive & Sheets",
-                        subtitle = if (isConnected)
-                            "Connected: ${userProfile?.googleAccountEmail}"
+                        title = "Google Sheets Backup",
+                        subtitle = if (pendingSheetsCount > 0)
+                            "$pendingSheetsCount pending records • Tap to sync"
+                        else if (isConnected)
+                            "Active • Automatic cloud sync"
                         else
-                            "Connect Google account for Drive & Sheets sync",
+                            "Connect Google Sheets for auto-backup",
                         onClick = onNavigateToGoogleDriveAndSheets
                     )
                     HorizontalDivider(color = BorderSubtle, thickness = 0.8.dp)
                     SettingsItem(
-                        icon = Icons.Default.TableChart,
-                        iconTint = EmeraldCash,
-                        title = "Google Sheets Mirror",
-                        subtitle = if (pendingSheetsCount > 0) "$pendingSheetsCount pending records" else "Sabhi synced",
-                        onClick = onNavigateToSheetsSync
-                    )
-                    HorizontalDivider(color = BorderSubtle, thickness = 0.8.dp)
-                    SettingsItem(
-                        icon = Icons.Default.Description,
-                        iconTint = EmeraldCash,
-                        title = "Excel Synchronization",
-                        subtitle = if (pendingExcelCount > 0) "$pendingExcelCount unsynced records" else "Up to date",
-                        onClick = onNavigateToExcelSync
+                        icon = Icons.Default.FileDownload,
+                        iconTint = GoldLight,
+                        title = "Export Data (CSV)",
+                        subtitle = "Kharche ka pura data file me save ya share karein",
+                        onClick = onExportCsv
                     )
                 }
             }
@@ -249,16 +243,8 @@ fun SettingsScreen(
                         icon = Icons.Default.Lock,
                         iconTint = if (isPinLockEnabled) GoldPrimary else TextMuted,
                         title = "App Lock (4-Digit PIN)",
-                        subtitle = if (isPinLockEnabled) "PIN lock chalu hai (Quick Add ko PIN nahi chahiye)" else "Band hai",
+                        subtitle = if (isPinLockEnabled) "PIN lock chalu hai" else "Band hai (Off)",
                         onClick = { showPinDialog = true }
-                    )
-                    HorizontalDivider(color = BorderSubtle, thickness = 0.8.dp)
-                    SettingsItem(
-                        icon = Icons.Default.FileDownload,
-                        iconTint = GoldLight,
-                        title = "Backup & Export (CSV)",
-                        subtitle = "Kharche ka pura data file me save karo",
-                        onClick = onExportCsv
                     )
                 }
             }

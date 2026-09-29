@@ -5,8 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -65,107 +66,116 @@ fun PotsScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
-            // TOTAL POTS BALANCE CARD
-            Surface(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, BorderGlow, RoundedCornerShape(18.dp)),
-                color = SurfaceElevated,
-                shape = RoundedCornerShape(18.dp),
-                shadowElevation = 4.dp
+                    .fillMaxSize()
+                    .widthIn(max = 840.dp)
+                    .padding(horizontal = 16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Gullak me Jama Kul Rashi",
-                        fontSize = 13.sp,
-                        color = TextSecondary,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "₹${totalPotBalance.toInt()}",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = GoldPrimary
-                    )
-                    Text(
-                        text = "Pots virtual allocation hain (Emergency fund, Safar, Naya phone aadi)",
-                        fontSize = 11.sp,
-                        color = TextMuted
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Aapke Gullak (${pots.size})",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-
-                TextButton(onClick = { showCreatePotDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Naya Pot Banao", color = GoldPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            if (pots.isEmpty()) {
-                Box(
+                // TOTAL POTS BALANCE CARD (Apple-Clean minimal card)
+                Surface(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 60.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .border(1.2.dp, BorderGlow, RoundedCornerShape(20.dp)),
+                    color = SurfaceElevated,
+                    shape = RoundedCornerShape(20.dp),
+                    shadowElevation = 6.dp
                 ) {
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Savings,
-                            contentDescription = null,
-                            tint = TextMuted,
-                            modifier = Modifier.size(48.dp)
+                        Text(
+                            text = "Gullak me Jama Kul Rashi",
+                            fontSize = 13.sp,
+                            color = TextSecondary,
+                            fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "Koi Gullak / Pot nahi banaya abhi tak.",
-                            fontSize = 14.sp,
-                            color = TextSecondary
+                            text = "₹${totalPotBalance.toInt()}",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = GoldPrimary
                         )
                         Text(
-                            text = "'Naya Pot Banao' par tap karke target set karein.",
+                            text = "Pots virtual allocation hain (Emergency fund, Safar, Naya phone aadi)",
                             fontSize = 12.sp,
                             color = TextMuted
                         )
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(pots, key = { it.id }) { pot ->
-                        PotCard(
-                            pot = pot,
-                            onDeposit = { selectedPotForDeposit = pot },
-                            onDelete = { onDeletePot(pot.id) }
-                        )
+                    Text(
+                        text = "Aapke Gullak (${pots.size})",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+
+                    TextButton(onClick = { showCreatePotDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Naya Pot Banao", color = GoldPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (pots.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 60.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Savings,
+                                contentDescription = null,
+                                tint = TextMuted,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                text = "Koi Gullak / Pot nahi banaya abhi tak.",
+                                fontSize = 14.sp,
+                                color = TextSecondary
+                            )
+                            Text(
+                                text = "'Naya Pot Banao' par tap karke target set karein.",
+                                fontSize = 12.sp,
+                                color = TextMuted
+                            )
+                        }
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 280.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 80.dp)
+                    ) {
+                        items(pots, key = { it.id }) { pot ->
+                            PotCard(
+                                pot = pot,
+                                onDeposit = { selectedPotForDeposit = pot },
+                                onDelete = { onDeletePot(pot.id) }
+                            )
+                        }
                     }
                 }
             }

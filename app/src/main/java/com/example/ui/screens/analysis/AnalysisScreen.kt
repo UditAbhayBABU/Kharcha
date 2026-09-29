@@ -104,14 +104,20 @@ fun AnalysisScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(bottom = 80.dp)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 760.dp)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
             // PERIOD FILTER CHIPS
             item {
                 Row(
@@ -239,10 +245,10 @@ fun AnalysisScreen(
                                     if (isExceeded) {
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "“Iss mahine already bhot kharcha ho gaya MALIKK”",
+                                            text = "Monthly budget limit exceed ho gayi hai",
                                             fontSize = 11.sp,
                                             color = OrangeWarning,
-                                            fontWeight = FontWeight.Bold
+                                            fontWeight = FontWeight.SemiBold
                                         )
                                     }
                                 }
@@ -336,4 +342,5 @@ fun AnalysisScreen(
             }
         }
     }
+}
 }

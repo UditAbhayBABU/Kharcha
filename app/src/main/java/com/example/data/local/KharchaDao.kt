@@ -19,6 +19,12 @@ interface KharchaDao {
     @Query("SELECT * FROM expenses WHERE userId = :userId AND sheetsSynced = 0 AND syncState != 'PENDING_DELETE' ORDER BY dateMillis ASC")
     suspend fun getPendingSheetsExpenses(userId: String): List<ExpenseEntity>
 
+    @Query("SELECT * FROM expenses WHERE userId = :userId AND syncState != 'PENDING_DELETE' ORDER BY dateMillis DESC")
+    suspend fun getAllExpensesList(userId: String): List<ExpenseEntity>
+
+    @Query("UPDATE expenses SET sheetsSynced = 1 WHERE userId = :userId")
+    suspend fun markAllExpensesSheetsSynced(userId: String)
+
     @Query("SELECT * FROM expenses WHERE userId = :userId AND excelSynced = 0 AND syncState != 'PENDING_DELETE' ORDER BY dateMillis ASC")
     suspend fun getPendingExcelExpenses(userId: String): List<ExpenseEntity>
 

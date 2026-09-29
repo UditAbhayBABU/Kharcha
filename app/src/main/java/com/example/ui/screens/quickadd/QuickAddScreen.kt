@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -50,6 +52,9 @@ fun QuickAddScreen(
     snackbarHostState: SnackbarHostState
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     var amountString by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(categories.firstOrNull()?.name ?: "Khana & Peena") }
     var selectedContext by remember { mutableStateOf(ContextType.PERSONAL) }
@@ -61,11 +66,6 @@ fun QuickAddScreen(
     var note by remember { mutableStateOf("") }
     var selectedPotId by remember { mutableStateOf<String?>(null) }
     var selectedUdhaarPartyId by remember { mutableStateOf<String?>(null) }
-
-    // 2.5s Cute Check Celebration Animation State
-    var showSuccessCelebration by remember { mutableStateOf(false) }
-    var savedSuccessAmount by remember { mutableStateOf(0.0) }
-    var savedSuccessCategory by remember { mutableStateOf("") }
 
     // Humorous Budget Alert State (Informational warning ONLY — never blocks saving)
     var showBudgetWarningDialog by remember { mutableStateOf(false) }
@@ -98,7 +98,7 @@ fun QuickAddScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Jaldi Kharcha Jodo",
+                            text = "Add Expense",
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
                             fontSize = 19.sp
@@ -106,7 +106,11 @@ fun QuickAddScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        focusManager.clearFocus(force = true)
+                        keyboardController?.hide()
+                        onNavigateBack()
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Peeche",
@@ -118,14 +122,21 @@ fun QuickAddScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 520.dp)
+                    .padding(horizontal = 18.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
 
             // 1. AMOUNT DISPLAY (Modern Dark Glossy Glassmorphic Card)
             Surface(
@@ -299,17 +310,20 @@ fun QuickAddScreen(
             // 4. NUMBER PAD FOR INSTANT ENTRY
             TactileNumberPad(
                 onDigitClick = { digit ->
+                    focusManager.clearFocus()
                     if (digit == "." && amountString.contains(".")) return@TactileNumberPad
                     if (amountString.length < 8) {
                         amountString += digit
                     }
                 },
                 onBackspace = {
+                    focusManager.clearFocus()
                     if (amountString.isNotEmpty()) {
                         amountString = amountString.dropLast(1)
                     }
                 },
                 onClear = {
+                    focusManager.clearFocus()
                     amountString = ""
                 }
             )
@@ -461,6 +475,8 @@ fun QuickAddScreen(
                 icon = Icons.Default.Check,
                 onClick = {
                     if (amountValue <= 0) return@TactileButton
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
 
                     val selectedBiz = businesses.find { it.id == selectedBusinessId }
                     val selectedPot = pots.find { it.id == selectedPotId }
@@ -514,12 +530,7 @@ fun QuickAddScreen(
 
                     onSaveExpense(expense)
 
-                    // Trigger cute 2.5s celebration animation
-                    savedSuccessAmount = expense.amount
-                    savedSuccessCategory = expense.category
-                    showSuccessCelebration = true
-
-                    // Reset for next entry
+                    // Reset for next entry without switching tabs
                     amountString = ""
                     note = ""
                     selectedPotId = null
@@ -531,18 +542,7 @@ fun QuickAddScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
-
-        // Cute 2.5s Check Success Celebration Overlay
-        if (showSuccessCelebration) {
-            CuteCheckSuccessAnimation(
-                amount = savedSuccessAmount,
-                categoryName = savedSuccessCategory,
-                onFinished = {
-                    showSuccessCelebration = false
-                    onNavigateBack()
-                }
-            )
-        }
+    }
 
         // Humorous Budget Alert Dialog (Warning ONLY — expense is already saved!)
         if (showBudgetWarningDialog) {
@@ -552,7 +552,10 @@ fun QuickAddScreen(
                 alreadySpent = exceededAlreadySpent,
                 currentExpense = exceededCurrentExpense,
                 projectedSpent = exceededProjectedSpent,
-                onDismiss = { showBudgetWarningDialog = false }
+                onDismiss = {
+                    showBudgetWarningDialog = false
+                    onNavigateBack()
+                }
             )
         }
     }

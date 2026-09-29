@@ -7,6 +7,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,111 +80,120 @@ fun UdhaarScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
-            // OUTSTANDING SUMMARY CARD
-            Surface(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, BorderGlow, RoundedCornerShape(18.dp)),
-                color = SurfaceElevated,
-                shape = RoundedCornerShape(18.dp),
-                shadowElevation = 4.dp
+                    .fillMaxSize()
+                    .widthIn(max = 840.dp)
+                    .padding(horizontal = 16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Bazar me Kul Udhaar Baki",
-                        fontSize = 13.sp,
-                        color = TextSecondary,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "₹${totalOutstanding.toInt()}",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (totalOutstanding > 0) OrangeWarning else EmeraldCash
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(text = "Kul Diya (Given)", fontSize = 11.sp, color = TextMuted)
-                            Text(text = "₹${totalGiven.toInt()}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(text = "Wapas Mila (Received)", fontSize = 11.sp, color = TextMuted)
-                            Text(text = "₹${totalReceived.toInt()}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = EmeraldCash)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Parties / Log (${parties.size})",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-
-                TextButton(onClick = { showAddPartyDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Naya Naam Jodo", color = GoldPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            if (parties.isEmpty()) {
-                Box(
+                // OUTSTANDING SUMMARY CARD
+                Surface(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 60.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .border(1.2.dp, BorderGlow, RoundedCornerShape(20.dp)),
+                    color = SurfaceElevated,
+                    shape = RoundedCornerShape(20.dp),
+                    shadowElevation = 6.dp
                 ) {
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Groups,
-                            contentDescription = null,
-                            tint = TextMuted,
-                            modifier = Modifier.size(44.dp)
+                        Text(
+                            text = "Bazar me Kul Udhaar Baki",
+                            fontSize = 13.sp,
+                            color = TextSecondary,
+                            fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "Koi Udhaar Khata nahi hai.",
-                            fontSize = 14.sp,
-                            color = TextSecondary
+                            text = "₹${totalOutstanding.toInt()}",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (totalOutstanding > 0) OrangeWarning else EmeraldCash
                         )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(text = "Kul Diya (Given)", fontSize = 11.sp, color = TextMuted)
+                                Text(text = "₹${totalGiven.toInt()}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(text = "Wapas Mila (Received)", fontSize = 11.sp, color = TextMuted)
+                                Text(text = "₹${totalReceived.toInt()}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = EmeraldCash)
+                            }
+                        }
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(parties, key = { it.id }) { party ->
-                        UdhaarPartyCard(
-                            party = party,
-                            onOpenLedger = { selectedPartyForLedger = party },
-                            onOpenTransactionDialog = { showTransactionDialogForParty = party }
-                        )
+                    Text(
+                        text = "Parties / Log (${parties.size})",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+
+                    TextButton(onClick = { showAddPartyDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Naya Naam Jodo", color = GoldPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (parties.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 60.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Groups,
+                                contentDescription = null,
+                                tint = TextMuted,
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Text(
+                                text = "Koi Udhaar Khata nahi hai.",
+                                fontSize = 14.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 280.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 80.dp)
+                    ) {
+                        items(parties, key = { it.id }) { party ->
+                            UdhaarPartyCard(
+                                party = party,
+                                onOpenLedger = { selectedPartyForLedger = party },
+                                onOpenTransactionDialog = { showTransactionDialogForParty = party }
+                            )
+                        }
                     }
                 }
             }

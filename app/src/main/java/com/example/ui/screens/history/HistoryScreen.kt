@@ -114,7 +114,7 @@ fun HistoryScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Kharche ka Hisab",
+                            text = "KHARCHA History",
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
                             fontSize = 18.sp
@@ -154,12 +154,18 @@ fun HistoryScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 720.dp)
+                    .padding(horizontal = 16.dp)
+            ) {
             // SEARCH BAR
             OutlinedTextField(
                 value = searchQuery,
@@ -362,6 +368,7 @@ fun HistoryScreen(
             }
         }
     }
+}
 }
 
 fun getCategoryIcon(name: String): androidx.compose.ui.graphics.vector.ImageVector {

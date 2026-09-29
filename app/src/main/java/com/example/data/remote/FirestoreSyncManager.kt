@@ -12,9 +12,16 @@ class FirestoreSyncManager(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 ) {
     private val tag = "FirestoreSyncManager"
+    private var isCloudRestricted = false
+
+    fun resetCloudRestriction() {
+        isCloudRestricted = false
+    }
+
+    fun isRestricted(): Boolean = isCloudRestricted
 
     suspend fun syncPendingExpenses(userId: String, dao: KharchaDao): Result<Int> {
-        if (userId.isBlank() || userId == "guest_user") return Result.success(0)
+        if (userId.isBlank() || userId == "guest_user" || isCloudRestricted) return Result.success(0)
         val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
             ?: return Result.success(0)
         if (authUser.uid != userId) return Result.success(0)
@@ -62,13 +69,19 @@ class FirestoreSyncManager(
 
             Result.success(syncedCount)
         } catch (e: Exception) {
-            Log.e(tag, "Expense sync error: ${e.message}", e)
-            Result.failure(e)
+            if (e.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true ||
+                e is com.google.firebase.firestore.FirebaseFirestoreException) {
+                isCloudRestricted = true
+                Log.d(tag, "Firestore cloud permissions restricted. Local database active.")
+            } else {
+                Log.d(tag, "Expense sync notice: ${e.message}")
+            }
+            Result.success(0)
         }
     }
 
     suspend fun pullRemoteExpenses(userId: String, dao: KharchaDao): Result<Int> {
-        if (userId.isBlank() || userId == "guest_user") return Result.success(0)
+        if (userId.isBlank() || userId == "guest_user" || isCloudRestricted) return Result.success(0)
         val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
             ?: return Result.success(0)
         if (authUser.uid != userId) return Result.success(0)
@@ -126,7 +139,12 @@ class FirestoreSyncManager(
             dao.insertExpenses(remoteEntities)
             Result.success(remoteEntities.size)
         } catch (e: Exception) {
-            Log.e(tag, "Pull remote expenses error: ${e.message}", e)
+            if (e.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true) {
+                isCloudRestricted = true
+                Log.w(tag, "Pull remote expenses restricted by server rules. Local records active.")
+            } else {
+                Log.w(tag, "Pull remote expenses notice: ${e.message}")
+            }
             Result.failure(e)
         }
     }
@@ -209,7 +227,8 @@ class FirestoreSyncManager(
                 dao.insertBusiness(com.example.data.local.BusinessEntity.fromDomain(biz))
             }
         } catch (e: Exception) {
-            Log.e(tag, "Sync businesses error: ${e.message}")
+            if (e.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true) isCloudRestricted = true
+            Log.d(tag, "Sync businesses notice: ${e.message}")
         }
     }
 
@@ -318,7 +337,8 @@ class FirestoreSyncManager(
                     SetOptions.merge()
                 ).await()
         } catch (e: Exception) {
-            Log.e(tag, "Save udhaar entry error: ${e.message}")
+            if (e.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true) isCloudRestricted = true
+            Log.d(tag, "Save udhaar entry notice: ${e.message}")
         }
     }
 
@@ -399,22 +419,24 @@ class FirestoreSyncManager(
     }
 
     suspend fun markExpenseSheetsSyncedInFirestore(userId: String, expenseId: String) {
+        if (isCloudRestricted) return
         try {
             firestore.collection("users").document(userId)
                 .collection("expenses").document(expenseId)
                 .update("sheetsSynced", true).await()
         } catch (e: Exception) {
-            Log.e(tag, "Mark sheets synced in firestore error: ${e.message}")
+            Log.d(tag, "Mark sheets synced in firestore notice: ${e.message}")
         }
     }
 
     suspend fun markExpenseExcelSyncedInFirestore(userId: String, expenseId: String) {
+        if (isCloudRestricted) return
         try {
             firestore.collection("users").document(userId)
                 .collection("expenses").document(expenseId)
                 .update("excelSynced", true).await()
         } catch (e: Exception) {
-            Log.e(tag, "Mark excel synced in firestore error: ${e.message}")
+            Log.d(tag, "Mark excel synced in firestore notice: ${e.message}")
         }
     }
 

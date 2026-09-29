@@ -18,8 +18,10 @@ import java.util.concurrent.TimeUnit
 
 class GoogleSheetsMirrorService(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 ) {
     private val tag = "SheetsMirror"
@@ -31,8 +33,16 @@ class GoogleSheetsMirrorService(
         webhookUrl: String,
         dao: KharchaDao
     ): Result<Int> = withContext(Dispatchers.IO) {
-        if (webhookUrl.isBlank()) {
+        val cleanUrl = webhookUrl.trim()
+        if (cleanUrl.isBlank()) {
             return@withContext Result.failure(IllegalStateException("Google Sheets Webhook URL set nahi hai"))
+        }
+
+        // Detect if user pasted the Google Sheet browser link instead of the Apps Script Web App URL
+        if (cleanUrl.contains("docs.google.com/spreadsheets")) {
+            val errorMsg = "Aapne Google Sheet ka browser link daala hai! Kripya Apps Script me 'Deploy -> Manage deployments' se Web App URL (script.google.com/macros/s/.../exec) copy karke daalein."
+            Log.e(tag, errorMsg)
+            return@withContext Result.failure(IllegalArgumentException(errorMsg))
         }
 
         try {
@@ -67,18 +77,34 @@ class GoogleSheetsMirrorService(
             }
 
             val request = Request.Builder()
-                .url(webhookUrl)
+                .url(cleanUrl)
                 .post(payload.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
             val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
+            val code = response.code
+            val finalUrl = response.request.url.toString()
+
+            // If redirected to Google login, it means "Who has access" was not set to "Anyone"
+            if (finalUrl.contains("accounts.google.com")) {
+                val errorMsg = "Google ne permission block ki! Apps Script me 'Deploy -> Manage deployments' par jayein aur 'Who has access' ko 'Anyone' karein, tabhi sync hoga."
+                Log.e(tag, errorMsg)
+                return@withContext Result.failure(Exception(errorMsg))
+            }
+
+            // Google Apps Script Web App responds with 200 or 302 redirect
+            if (response.isSuccessful || code in 200..399) {
                 for (item in pending) {
                     dao.markExpenseSheetsSynced(item.id)
                 }
                 Result.success(pending.size)
             } else {
-                val errorMsg = "Sheets sync response error: code ${response.code}"
+                val responseBody = response.body?.string() ?: ""
+                val errorMsg = if (code == 405 || code == 404) {
+                    "Webhook URL invalid hai (code $code). Kripya check karein ki Apps Script me 'Who has access: Anyone' chuna hai aur 'Web App URL' use kiya hai."
+                } else {
+                    "Sheets sync response error: code $code. $responseBody"
+                }
                 Log.e(tag, errorMsg)
                 Result.failure(Exception(errorMsg))
             }

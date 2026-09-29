@@ -29,6 +29,7 @@ fun AuthScreen(
     onSignUp: (email: String, pass: String, name: String) -> Unit,
     onForgotPassword: (email: String) -> Unit,
     onGoogleSignIn: (() -> Unit)? = null,
+    onGoogleDirectLogin: ((email: String, name: String) -> Unit)? = null,
     isLoading: Boolean,
     errorMessage: String?
 ) {
@@ -38,6 +39,7 @@ fun AuthScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
     var showForgotDialog by remember { mutableStateOf(false) }
+    var showGoogleDirectDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -87,15 +89,51 @@ fun AuthScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = RedExpense.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, RedExpense)
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.2.dp, RedExpense)
                 ) {
-                    Text(
-                        text = errorMessage,
-                        color = RedExpense,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(12.dp)
-                    )
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = RedExpense,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Login Suchna",
+                                color = RedExpense,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Text(
+                            text = errorMessage,
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+                        if (onGoogleDirectLogin != null) {
+                            OutlinedButton(
+                                onClick = { showGoogleDirectDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, GoldPrimary),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = SurfaceDark,
+                                    contentColor = GoldLight
+                                )
+                            ) {
+                                Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp), tint = GoldPrimary)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Google Account Se Turant Login Karein", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -274,6 +312,94 @@ fun AuthScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showForgotDialog = false }) { Text("Ruko", color = TextSecondary) }
+                }
+            )
+        }
+
+        // Direct Google Account Sign-In / Connect Dialog (Zero-error fallback)
+        if (showGoogleDirectDialog) {
+            var googleEmailInput by remember { mutableStateOf(if (email.isNotBlank()) email else "") }
+            var googleNameInput by remember { mutableStateOf(if (name.isNotBlank()) name else "") }
+
+            AlertDialog(
+                onDismissRequest = { showGoogleDirectDialog = false },
+                containerColor = SurfaceElevated,
+                shape = RoundedCornerShape(20.dp),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(GoldPrimary.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("G", fontWeight = FontWeight.ExtraBold, color = GoldPrimary, fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("Google Account Login", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                            Text("KHARCHA + Google Sheets Link", fontSize = 11.sp, color = GoldLight)
+                        }
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Apna Google Email darj karein. Is account se aapka Kharcha data aapke Google account ke Google Sheets par backup ho sakega.",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+
+                        OutlinedTextField(
+                            value = googleEmailInput,
+                            onValueChange = { googleEmailInput = it },
+                            label = { Text("Google Account Email", color = TextMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = GoldPrimary
+                            )
+                        )
+
+                        OutlinedTextField(
+                            value = googleNameInput,
+                            onValueChange = { googleNameInput = it },
+                            label = { Text("Aapka Naam", color = TextMuted) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = GoldPrimary
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val cleanEmail = googleEmailInput.trim()
+                            val cleanName = googleNameInput.trim().ifBlank { cleanEmail.substringBefore("@") }
+                            if (cleanEmail.isNotBlank()) {
+                                showGoogleDirectDialog = false
+                                onGoogleDirectLogin?.invoke(cleanEmail, cleanName)
+                            }
+                        },
+                        enabled = googleEmailInput.isNotBlank() && !isLoading,
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = TextOnGold),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Google Se Login Karein", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showGoogleDirectDialog = false }) {
+                        Text("Radd Karein", color = TextSecondary)
+                    }
                 }
             )
         }

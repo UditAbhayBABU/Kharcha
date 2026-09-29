@@ -1,5 +1,6 @@
 package com.example.ui.screens.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -178,7 +179,8 @@ fun SheetsSyncScreen(
     userProfile: UserProfile?,
     pendingCount: Int,
     onSaveSheetsUrl: (String, Boolean) -> Unit,
-    onSyncNow: () -> Unit,
+    onSyncNow: (currentUrl: String) -> Unit,
+    onNavigateToGoogleDrive: (() -> Unit)? = null,
     isSyncing: Boolean,
     onNavigateBack: () -> Unit
 ) {
@@ -214,12 +216,24 @@ fun SheetsSyncScreen(
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = "KHARCHA → Firestore → Google Sheets Mirror", fontWeight = FontWeight.Bold, color = GoldLight, fontSize = 13.sp)
-                    Text(
-                        text = "Google Sheets sirf ek backup/mirror destination hai. Primary database hamesha Firestore rehta hai.",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
+                    Text(text = "KHARCHA → Google Sheets Cloud Backup", fontWeight = FontWeight.Bold, color = GoldLight, fontSize = 14.sp)
+                    val email = userProfile?.googleAccountEmail.orEmpty()
+                    if (email.isNotBlank()) {
+                        Text(
+                            text = "Linked Google Account: $email",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = EmeraldCash
+                        )
+                    }
+                    val sheetName = userProfile?.sheetsSpreadsheetName.orEmpty()
+                    if (sheetName.isNotBlank()) {
+                        Text(
+                            text = "Active Sheet: $sheetName",
+                            fontSize = 12.sp,
+                            color = TextPrimary
+                        )
+                    }
                     Text(
                         text = "Pending to mirror: $pendingCount transactions",
                         fontSize = 13.sp,
@@ -229,17 +243,75 @@ fun SheetsSyncScreen(
                 }
             }
 
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { Text("Google Apps Script / Webhook URL", color = TextMuted) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedBorderColor = GoldPrimary
+            if (onNavigateToGoogleDrive != null) {
+                OutlinedButton(
+                    onClick = onNavigateToGoogleDrive,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldPrimary),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = SurfaceCard,
+                        contentColor = GoldLight
+                    )
+                ) {
+                    Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp), tint = GoldPrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Naya Spreadsheet Banao & Jodo (Drive Hub)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { 
+                        url = it
+                        onSaveSheetsUrl(it.trim(), autoSync)
+                    },
+                    label = { Text("Google Apps Script Web App URL", color = TextMuted) },
+                    placeholder = { Text("https://script.google.com/macros/s/.../exec", color = TextMuted.copy(alpha = 0.5f), fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = if (url.contains("docs.google.com/spreadsheets")) RedExpense else GoldPrimary,
+                        unfocusedBorderColor = if (url.contains("docs.google.com/spreadsheets")) RedExpense.copy(alpha = 0.6f) else BorderSubtle
+                    )
                 )
-            )
+
+                val trimmed = url.trim()
+                if (trimmed.contains("docs.google.com/spreadsheets")) {
+                    Surface(
+                        color = RedExpense.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, RedExpense.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = RedExpense, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Sheet browser URL nahi chalega! Apps Script se 'Web App URL' paste karein.",
+                                color = RedExpense,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                } else if (trimmed.contains("script.google.com/macros/s/")) {
+                    Surface(
+                        color = EmeraldCash.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, EmeraldCash.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldCash, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Valid Web App URL!", color = EmeraldCash, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -249,7 +321,10 @@ fun SheetsSyncScreen(
                 Text("Har kharche par Auto-Mirror karein?", color = TextPrimary, fontSize = 13.sp)
                 Switch(
                     checked = autoSync,
-                    onCheckedChange = { autoSync = it },
+                    onCheckedChange = { 
+                        autoSync = it
+                        onSaveSheetsUrl(url.trim(), it)
+                    },
                     colors = SwitchDefaults.colors(checkedThumbColor = GoldPrimary)
                 )
             }
@@ -264,7 +339,7 @@ fun SheetsSyncScreen(
 
             TactileButton(
                 text = if (isSyncing) "Mirroring..." else "Sync Abhi Karo (Pending: $pendingCount)",
-                onClick = onSyncNow,
+                onClick = { onSyncNow(url.trim()) },
                 isLoading = isSyncing,
                 isPrimary = false,
                 modifier = Modifier.fillMaxWidth()
@@ -316,7 +391,7 @@ fun ExcelSyncScreen(
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = "Firestore MASTER → Controlled Excel Sync → Google Drive", fontWeight = FontWeight.Bold, color = GoldLight, fontSize = 13.sp)
+                    Text(text = "Excel Backup Synchronization", fontWeight = FontWeight.Bold, color = GoldLight, fontSize = 14.sp)
                     Text(
                         text = "Excel synchronization har kharche par nahi hota. Yeh 24 ghante me 1 baar chalta hai ya jab aap manually 'UPDATE NOW' dabayein.",
                         fontSize = 12.sp,
@@ -412,8 +487,8 @@ fun AdminPanelScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(text = "System Information", fontWeight = FontWeight.Bold, color = GoldLight)
-                    Text(text = "App: KHARCHA (Native Android)", color = TextPrimary, fontSize = 13.sp)
-                    Text(text = "Primary DB: Cloud Firestore (MASTER)", color = TextPrimary, fontSize = 13.sp)
+                    Text(text = "App: KHARCHA", color = TextPrimary, fontSize = 13.sp)
+                    Text(text = "Cloud Sync: Surakshit & Active", color = TextPrimary, fontSize = 13.sp)
                     Text(text = "Registered Users Count: ${adminUsers.size}", color = EmeraldCash, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }

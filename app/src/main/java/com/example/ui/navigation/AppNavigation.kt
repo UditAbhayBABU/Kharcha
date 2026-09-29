@@ -28,13 +28,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.KharchaApplication
 import com.example.data.model.*
+import com.example.ui.components.*
 import com.example.ui.screens.analysis.AnalysisScreen
 import com.example.ui.screens.auth.AuthScreen
 import com.example.ui.screens.history.HistoryScreen
@@ -62,6 +65,9 @@ fun AppNavigation(
     val kharchaRepo = app.kharchaRepository
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val celebrationController = remember { CelebrationController() }
 
     val currentUser by authRepo.currentUser.collectAsStateWithLifecycle()
     val userProfile by authRepo.userProfile.collectAsStateWithLifecycle()
@@ -106,6 +112,11 @@ fun AppNavigation(
         pendingSheetsCount = kharchaRepo.getPendingSheetsCount(userId)
     }
 
+    LaunchedEffect(currentScreen) {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+    }
+
     // Handle App Lock:
     // User requirement: "Quick Add must NOT require PIN/biometric, because its purpose is instant expense recording."
     val isPinRequired = authRepo.isPinLockEnabled() && !isAppUnlocked && currentScreen != Screen.QuickAdd
@@ -118,25 +129,34 @@ fun AppNavigation(
             try {
                 val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
                 val idToken = account.idToken
+                val email = account.email.orEmpty()
+                val displayName = account.displayName.orEmpty()
                 if (idToken != null) {
                     authLoading = true
                     authError = null
                     coroutineScope.launch {
-                        val res = authRepo.signInWithGoogleCredential(idToken)
+                        val res = authRepo.signInWithGoogleCredential(
+                            idToken = idToken,
+                            emailHint = email,
+                            displayNameHint = displayName
+                        )
                         authLoading = false
                         res.onFailure { authError = "Google login fail: ${it.localizedMessage}" }
                     }
+                } else if (email.isNotBlank()) {
+                    authLoading = true
+                    authError = null
+                    coroutineScope.launch {
+                        val res = authRepo.signInWithGoogleAccountDirect(email, displayName)
+                        authLoading = false
+                        res.onFailure { authError = "Login fail: ${it.localizedMessage}" }
+                    }
                 } else {
-                    authError = "Google token nahi mila"
+                    authError = "Google account ki jankari nahi mili. Kripya direct connect karein."
                 }
             } catch (e: com.google.android.gms.common.api.ApiException) {
                 authLoading = false
-                authError = when (e.statusCode) {
-                    10 -> "Google Developer Error (10): Google Play Services SHA-1 config missing. Kripya Email/Password se login karein."
-                    12500 -> "Google Sign-in (12500): Device par Google Play account login nahi hai. Kripya Email/Password use karein."
-                    12501 -> "Google sign-in cancel kiya gaya."
-                    else -> "Google login error (${e.statusCode}): ${e.localizedMessage}"
-                }
+                authError = "Google Play Services verification: Kripya neeche diye gaye button se apna Google email darj karke turant login karein."
             } catch (e: Exception) {
                 authLoading = false
                 authError = e.message
@@ -182,6 +202,15 @@ fun AppNavigation(
                 val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
                 authGoogleSignInLauncher.launch(client.signInIntent)
             },
+            onGoogleDirectLogin = { email, name ->
+                authLoading = true
+                authError = null
+                coroutineScope.launch {
+                    val result = authRepo.signInWithGoogleAccountDirect(email, name)
+                    authLoading = false
+                    result.onFailure { authError = "Google login error: ${it.localizedMessage}" }
+                }
+            },
             isLoading = authLoading,
             errorMessage = authError
         )
@@ -198,18 +227,24 @@ fun AppNavigation(
         return
     }
 
-    Scaffold(
-        containerColor = BackgroundDark,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            if (currentScreen in listOf(Screen.History, Screen.QuickAdd, Screen.Udhaar, Screen.Pots, Screen.Analysis, Screen.Settings)) {
-                KharchaBottomBar(
-                    currentScreen = currentScreen,
-                    onSelectScreen = { currentScreen = it }
-                )
-            }
-        }
-    ) { innerPadding ->
+    CompositionLocalProvider(LocalCelebrationController provides celebrationController) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                containerColor = BackgroundDark,
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                bottomBar = {
+                    if (currentScreen in listOf(Screen.History, Screen.QuickAdd, Screen.Udhaar, Screen.Pots, Screen.Analysis, Screen.Settings)) {
+                        KharchaBottomBar(
+                            currentScreen = currentScreen,
+                            onSelectScreen = {
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
+                                currentScreen = it
+                            }
+                        )
+                    }
+                }
+            ) { innerPadding ->
         val getScreenRank: (Screen) -> Int = { screen ->
             when (screen) {
                 Screen.History -> 0
@@ -273,6 +308,12 @@ fun AppNavigation(
                         allExpenses = expenses,
                         isBudgetFeatureEnabled = userProfile?.isBudgetFeatureEnabled == true,
                         onSaveExpense = { expense ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_SAVED,
+                                title = "Kharcha Saved!",
+                                subtitle = "${expense.category} • ₹${expense.amount.toInt()}",
+                                amount = expense.amount
+                            )
                             coroutineScope.launch {
                                 kharchaRepo.addExpense(
                                     expense = expense,
@@ -295,17 +336,56 @@ fun AppNavigation(
                         categories = categories,
                         businesses = businesses,
                         onDeleteExpense = { exp ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Kharcha Hataya",
+                                subtitle = "₹${exp.amount.toInt()} delete hua"
+                            )
                             coroutineScope.launch { kharchaRepo.deleteExpense(exp.id, userId) }
                         },
                         onRestoreExpense = { exp ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_SAVED,
+                                title = "Kharcha Wapas Aaya!",
+                                subtitle = "₹${exp.amount.toInt()} restore hua",
+                                amount = exp.amount
+                            )
                             coroutineScope.launch { kharchaRepo.addExpense(exp) }
                         },
                         onSyncNow = {
                             isSyncing = true
                             coroutineScope.launch {
-                                val res = kharchaRepo.syncAllWithCloud(userId)
+                                val cloudRes = kharchaRepo.syncAllWithCloud(userId)
+                                val webhook = userProfile?.sheetsUrl.orEmpty()
+                                val token = userProfile?.googleAccessToken.orEmpty()
+                                val sheetId = userProfile?.sheetsSpreadsheetId.orEmpty()
+                                var sheetsStatusMsg = ""
+
+                                if (webhook.isNotBlank()) {
+                                    val sheetsRes = kharchaRepo.syncGoogleSheets(userId, webhook)
+                                    sheetsRes.onSuccess {
+                                        sheetsStatusMsg = if (it > 0) " • Sheets me $it records sync hue!" else " • Sheets up to date"
+                                    }
+                                    sheetsRes.onFailure {
+                                        sheetsStatusMsg = " • Sheets: ${it.localizedMessage}"
+                                    }
+                                } else if (token.isNotBlank() && sheetId.isNotBlank() && !sheetId.startsWith("sheet_")) {
+                                    val directRes = kharchaRepo.syncGoogleSheetsDirect(userId, token, sheetId)
+                                    directRes.onSuccess {
+                                        sheetsStatusMsg = if (it > 0) " • Sheets me $it records sync hue!" else " • Sheets up to date"
+                                    }
+                                    directRes.onFailure {
+                                        sheetsStatusMsg = " • Sheets: ${it.localizedMessage}"
+                                    }
+                                }
+
                                 isSyncing = false
-                                Toast.makeText(context, res.getOrDefault("Sync complete"), Toast.LENGTH_SHORT).show()
+                                celebrationController.celebrate(
+                                    type = CelebrationActionType.SYNC_SUCCESS,
+                                    title = "Cloud & Sheets Synced!",
+                                    subtitle = "Sara hisab surakshit hai"
+                                )
+                                Toast.makeText(context, "${cloudRes.getOrDefault("Cloud sync safal")}$sheetsStatusMsg", Toast.LENGTH_LONG).show()
                             }
                         },
                         isSyncing = isSyncing,
@@ -318,14 +398,43 @@ fun AppNavigation(
                     UdhaarScreen(
                         userId = userId,
                         parties = udhaarParties,
-                        onAddParty = { party -> coroutineScope.launch { kharchaRepo.addUdhaarParty(party) } },
+                        onAddParty = { party ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.SETTINGS_SAVED,
+                                title = "Naya Khata Joda!",
+                                subtitle = "${party.name} ka ledger shuru hua"
+                            )
+                            coroutineScope.launch { kharchaRepo.addUdhaarParty(party) }
+                        },
                         onRecordTransaction = { partyId, amount, isRepayment, note ->
+                            if (isRepayment) {
+                                celebrationController.celebrate(
+                                    type = CelebrationActionType.UDHAAR_SETTLED,
+                                    title = "Udhaar Chukta / Jama!",
+                                    subtitle = "₹${amount.toInt()} wapas prapt hue",
+                                    amount = amount
+                                )
+                            } else {
+                                celebrationController.celebrate(
+                                    type = CelebrationActionType.UDHAAR_RECORDED,
+                                    title = "Udhaar Diya Gaya",
+                                    subtitle = "₹${amount.toInt()} khate me darj hua",
+                                    amount = amount
+                                )
+                            }
                             coroutineScope.launch {
                                 kharchaRepo.recordUdhaarTransaction(partyId, amount, isRepayment, note, userId)
                             }
                         },
                         onGetPartyEntries = { partyId -> kharchaRepo.getUdhaarEntries(partyId) },
-                        onDeleteParty = { partyId -> coroutineScope.launch { kharchaRepo.deleteUdhaarParty(partyId) } }
+                        onDeleteParty = { partyId ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Party Hatayi Gayi",
+                                subtitle = "Udhaar khata delete ho gaya"
+                            )
+                            coroutineScope.launch { kharchaRepo.deleteUdhaarParty(partyId) }
+                        }
                     )
                 }
 
@@ -334,9 +443,31 @@ fun AppNavigation(
                     PotsScreen(
                         userId = userId,
                         pots = pots,
-                        onAddPot = { pot -> coroutineScope.launch { kharchaRepo.addPot(pot) } },
-                        onDepositToPot = { potId, amount -> coroutineScope.launch { kharchaRepo.depositToPot(potId, amount) } },
-                        onDeletePot = { potId -> coroutineScope.launch { kharchaRepo.deletePot(potId) } }
+                        onAddPot = { pot ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.POT_CREATED,
+                                title = "Naya Gullak Banaya!",
+                                subtitle = "${pot.name} (Lakshya: ₹${pot.targetAmount.toInt()})"
+                            )
+                            coroutineScope.launch { kharchaRepo.addPot(pot) }
+                        },
+                        onDepositToPot = { potId, amount ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.POT_DEPOSIT,
+                                title = "Gullak Me Jama!",
+                                subtitle = "₹${amount.toInt()} bachat me save hue",
+                                amount = amount
+                            )
+                            coroutineScope.launch { kharchaRepo.depositToPot(potId, amount) }
+                        },
+                        onDeletePot = { potId ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Gullak Hataya Gaya",
+                                subtitle = "Pot band kar diya gaya"
+                            )
+                            coroutineScope.launch { kharchaRepo.deletePot(potId) }
+                        }
                     )
                 }
 
@@ -394,8 +525,22 @@ fun AppNavigation(
                     BusinessManagementScreen(
                         userId = userId,
                         businesses = businesses,
-                        onAddBusiness = { coroutineScope.launch { kharchaRepo.addBusiness(it) } },
-                        onDeleteBusiness = { coroutineScope.launch { kharchaRepo.deleteBusiness(it) } },
+                        onAddBusiness = {
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.SETTINGS_SAVED,
+                                title = "Business Joda Gaya!",
+                                subtitle = "${it.name} hisab shuru hua"
+                            )
+                            coroutineScope.launch { kharchaRepo.addBusiness(it) }
+                        },
+                        onDeleteBusiness = {
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Business Hataya Gaya",
+                                subtitle = "Business list se remove hua"
+                            )
+                            coroutineScope.launch { kharchaRepo.deleteBusiness(it) }
+                        },
                         onNavigateBack = { currentScreen = Screen.Settings }
                     )
                 }
@@ -405,8 +550,22 @@ fun AppNavigation(
                     CategoryManagementScreen(
                         userId = userId,
                         categories = categories,
-                        onAddCategory = { coroutineScope.launch { kharchaRepo.addCategory(it) } },
-                        onDeleteCategory = { coroutineScope.launch { kharchaRepo.deleteCategory(it) } },
+                        onAddCategory = {
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.SETTINGS_SAVED,
+                                title = "Category Jod Di Gayi!",
+                                subtitle = "${it.name} category shuru hui"
+                            )
+                            coroutineScope.launch { kharchaRepo.addCategory(it) }
+                        },
+                        onDeleteCategory = {
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Category Hatayi Gayi",
+                                subtitle = "Category delete ho gayi"
+                            )
+                            coroutineScope.launch { kharchaRepo.deleteCategory(it) }
+                        },
                         onNavigateBack = { currentScreen = Screen.Settings }
                     )
                 }
@@ -422,6 +581,11 @@ fun AppNavigation(
                             coroutineScope.launch { authRepo.updateBudgetFeatureEnabled(enabled) }
                         },
                         onSaveBudget = { budget ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.SETTINGS_SAVED,
+                                title = "Budget Limit Saved!",
+                                subtitle = "${budget.categoryName}: ₹${budget.monthlyLimit.toInt()}"
+                            )
                             coroutineScope.launch { kharchaRepo.saveBudget(budget) }
                         },
                         onNavigateBack = { currentScreen = Screen.Settings }
@@ -439,16 +603,23 @@ fun AppNavigation(
                                 Toast.makeText(context, "Sheets settings save ho gayi!", Toast.LENGTH_SHORT).show()
                             }
                         },
-                        onSyncNow = {
+                        onNavigateToGoogleDrive = { currentScreen = Screen.GoogleDriveAndSheets },
+                        onSyncNow = { currentUrl ->
                             isSyncing = true
                             coroutineScope.launch {
-                                val res = kharchaRepo.syncGoogleSheets(userId, userProfile?.sheetsUrl ?: "")
+                                val targetUrl = currentUrl.trim().ifBlank { userProfile?.sheetsUrl ?: "" }
+                                val res = kharchaRepo.syncGoogleSheets(userId, targetUrl)
                                 isSyncing = false
                                 res.onSuccess {
-                                    Toast.makeText(context, "$it records Google Sheets me sync ho gaye!", Toast.LENGTH_SHORT).show()
+                                    celebrationController.celebrate(
+                                        type = CelebrationActionType.SYNC_SUCCESS,
+                                        title = "Sheets Synced!",
+                                        subtitle = "✅ $it records Google Sheets me sync hue"
+                                    )
+                                    Toast.makeText(context, "✅ $it records Google Sheets me sync ho gaye!", Toast.LENGTH_SHORT).show()
                                 }
                                 res.onFailure {
-                                    Toast.makeText(context, it.message ?: "Sheets sync error", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, it.message ?: "Sheets sync error", Toast.LENGTH_LONG).show()
                                 }
                             }
                         },
@@ -472,6 +643,11 @@ fun AppNavigation(
                                 isSyncing = false
                                 res.onSuccess {
                                     authRepo.recordExcelSyncCompleted()
+                                    celebrationController.celebrate(
+                                        type = CelebrationActionType.SYNC_SUCCESS,
+                                        title = "Excel Workbook Synced!",
+                                        subtitle = it.message
+                                    )
                                     Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
                                 }
                                 res.onFailure {
@@ -524,24 +700,52 @@ fun AppNavigation(
                             kharchaRepo.listGoogleDriveFiles(token)
                         },
                         onCreateDriveWorkbook = { token, name ->
-                            kharchaRepo.createKharchaWorkbookInDrive(token, name)
+                            kharchaRepo.createAndRegisterSpreadsheet(userId, name, token)
                         },
-                        onTriggerSheetsSync = {
+                        onTriggerSheetsSync = { targetWebhookUrl ->
                             isSyncing = true
                             coroutineScope.launch {
                                 val token = userProfile?.googleAccessToken.orEmpty()
                                 val sheetId = userProfile?.sheetsSpreadsheetId.orEmpty()
-                                val res = if (token.isNotBlank() && sheetId.isNotBlank()) {
+                                val webhook = targetWebhookUrl.trim().ifBlank { userProfile?.sheetsUrl.orEmpty() }
+                                val res = if (webhook.isNotBlank()) {
+                                    kharchaRepo.syncGoogleSheets(userId, webhook)
+                                } else if (token.isNotBlank() && sheetId.isNotBlank() && !sheetId.startsWith("sheet_")) {
                                     kharchaRepo.syncGoogleSheetsDirect(userId, token, sheetId)
+                                } else if (sheetId.isNotBlank()) {
+                                    Result.failure(Exception("Direct Google Sheets sync ke liye Google Apps Script Web App URL paste karein ya account link karein."))
                                 } else {
-                                    kharchaRepo.syncGoogleSheets(userId, userProfile?.sheetsUrl.orEmpty())
+                                    Result.failure(Exception("Kripya pehle 'Apps Script Webhook' se URL daalein ya Naya Spreadsheet banayein."))
                                 }
                                 isSyncing = false
                                 res.onSuccess {
-                                    Toast.makeText(context, "$it records Google Sheets me sync ho gaye!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "✅ $it records Google Sheets me backup ho gaye!", Toast.LENGTH_SHORT).show()
                                 }
                                 res.onFailure {
                                     Toast.makeText(context, it.message ?: "Sheets sync error", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onShareExportFile = {
+                            coroutineScope.launch {
+                                try {
+                                    val csvContent = kharchaRepo.getAllExpensesForCsv(userId)
+                                    val file = java.io.File(context.cacheDir, "KHARCHA_GoogleSheets_Backup.csv")
+                                    file.writeText(csvContent)
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        file
+                                    )
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/csv"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        putExtra(android.content.Intent.EXTRA_SUBJECT, "KHARCHA Google Sheets Backup")
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Google Drive ya Sheets App me Save Karein"))
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Export error: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -579,6 +783,16 @@ fun AppNavigation(
             }
         }
     }
+}
+
+    // Master Action Celebration Overlay (Glossy Jewel Emblem + Apple 3D Emojis)
+    celebrationController.activeCelebration?.let { celebration ->
+        ActionCelebrationOverlay(
+            celebration = celebration,
+            onDismiss = { celebrationController.dismiss() }
+        )
+    }
+}
 }
 }
 
@@ -626,7 +840,7 @@ fun KharchaBottomBar(
                 val navItems = listOf(
                     Triple(Screen.History, "Kharcha", Icons.Outlined.ReceiptLong),
                     Triple(Screen.Udhaar, "Udhaar", Icons.Outlined.SwapHoriz),
-                    Triple(Screen.QuickAdd, "+ Jodo", Icons.Default.Add),
+                    Triple(Screen.QuickAdd, "Add", Icons.Default.Add),
                     Triple(Screen.Pots, "Gullak", Icons.Outlined.Savings),
                     Triple(Screen.Analysis, "Hisab", Icons.Outlined.QueryStats),
                     Triple(Screen.Settings, "Settings", Icons.Outlined.Tune)

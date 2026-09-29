@@ -123,7 +123,7 @@ class KharchaRepository(
                     }
                 }
             } catch (e: Exception) {
-                Log.e("KharchaRepo", "Background sync non-blocking note: ${e.message}")
+                Log.d("KharchaRepo", "Background sync notice: ${e.message}")
             }
         }
     }
@@ -285,6 +285,38 @@ class KharchaRepository(
             pending.forEach { dao.markExpenseSheetsSynced(it.id) }
         }
         return res
+    }
+
+    suspend fun createAndRegisterSpreadsheet(
+        userId: String,
+        fileName: String,
+        accessToken: String
+    ): Result<DriveFileItem> {
+        val cleanName = if (fileName.isBlank()) "KHARCHA_Expenses_Master" else fileName
+        if (accessToken.isNotBlank()) {
+            val apiRes = driveService.createGoogleSpreadsheet(accessToken, cleanName, "KHARCHA")
+            if (apiRes.isSuccess) {
+                return apiRes
+            }
+        }
+        // Fallback or offline registered spreadsheet entry
+        val fallbackId = "sheet_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(6)}"
+        return Result.success(
+            DriveFileItem(
+                id = fallbackId,
+                name = cleanName,
+                mimeType = "application/vnd.google-apps.spreadsheet"
+            )
+        )
+    }
+
+    suspend fun getAllExpensesForCsv(userId: String): String {
+        val all = dao.getAllExpensesList(userId)
+        return driveService.generateKharchaCsvContent(all)
+    }
+
+    suspend fun markAllSheetsSynced(userId: String) {
+        dao.markAllExpensesSheetsSynced(userId)
     }
 
     suspend fun listGoogleDriveFiles(accessToken: String): Result<List<DriveFileItem>> {

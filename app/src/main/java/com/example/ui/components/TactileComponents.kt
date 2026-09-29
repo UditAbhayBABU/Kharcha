@@ -33,13 +33,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
-import kotlinx.coroutines.delay
 
 /**
  * Modern Dark Tactile / Glossy Glassmorphic card with metallic rim highlights and obsidian depth.
@@ -147,7 +148,7 @@ fun TactileButton(
                 indication = ripple(color = if (isPrimary) GoldLight else Color.White),
                 enabled = enabled && !isLoading,
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onClick()
                 }
             ),
@@ -407,301 +408,6 @@ fun TactileNumberPad(
     }
 }
 
-/**
- * 2.5-Second Cute Check Celebration Animation for Quick Add!
- * Features spring pop check badge, glowing rotating metallic rim halo, floating sparkles, and tactile feedback.
- */
-@Composable
-fun CuteCheckSuccessAnimation(
-    amount: Double,
-    categoryName: String,
-    onFinished: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-
-    // Trigger initial tactile burst
-    LaunchedEffect(Unit) {
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-    }
-
-    // Animation progress
-    val scaleAnim = remember { Animatable(0f) }
-    val checkProgress = remember { Animatable(0f) }
-    val glowPulse = rememberInfiniteTransition(label = "glow_pulse")
-    val glowScale by glowPulse.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glow_scale"
-    )
-
-    val rotationAngle by glowPulse.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
-
-    val floatOffset by glowPulse.animateFloat(
-        initialValue = -5f,
-        targetValue = 5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "float_offset"
-    )
-
-    var isExiting by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        // Pop in with smooth spring bounce
-        scaleAnim.animateTo(
-            targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            )
-        )
-        // Draw checkmark stroke
-        checkProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(500, easing = FastOutSlowInEasing)
-        )
-        // Second tactile confirmation tap
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-
-        // Hold for exactly 2.5 seconds total
-        delay(1550)
-        isExiting = true
-        scaleAnim.animateTo(
-            targetValue = 0.85f,
-            animationSpec = tween(280, easing = FastOutSlowInEasing)
-        )
-        delay(40)
-        onFinished()
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = if (isExiting) 0.35f else 0.82f))
-            .clickable(onClick = onFinished),
-        contentAlignment = Alignment.Center
-    ) {
-        // Glossy Glassmorphic celebration card with obsidian depth & metallic glowing rim
-        Surface(
-            modifier = Modifier
-                .padding(24.dp)
-                .scale(scaleAnim.value)
-                .alpha(if (isExiting) 0f else 1f)
-                .border(
-                    BorderStroke(1.5.dp, GoldMetallicRimBrush),
-                    RoundedCornerShape(32.dp)
-                ),
-            shape = RoundedCornerShape(32.dp),
-            color = Color(0xF50A0E18),
-            shadowElevation = 24.dp
-        ) {
-            Box {
-                // Top rim specular highlight
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.5.dp)
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    Color.White.copy(alpha = 0.6f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
-                )
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 32.dp)
-                ) {
-                    // Glowing circular badge with cute check
-                    Box(
-                        modifier = Modifier.size(136.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Outer pulsing radial sweep blur halo
-                        Box(
-                            modifier = Modifier
-                                .size(126.dp)
-                                .scale(glowScale)
-                                .rotate(rotationAngle)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.sweepGradient(
-                                        listOf(
-                                            EmeraldCash.copy(alpha = 0.65f),
-                                            GoldPrimary.copy(alpha = 0.55f),
-                                            AmberVibrant.copy(alpha = 0.5f),
-                                            EmeraldCash.copy(alpha = 0.65f)
-                                        )
-                                    )
-                                )
-                                .blur(22.dp)
-                        )
-
-                        // Glossy inner container with chamfered rim
-                        Surface(
-                            modifier = Modifier
-                                .size(102.dp)
-                                .border(
-                                    BorderStroke(
-                                        2.5.dp,
-                                        GoldMetallicRimBrush
-                                    ),
-                                    CircleShape
-                                ),
-                            shape = CircleShape,
-                            color = SurfaceElevated,
-                            shadowElevation = 18.dp
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.radialGradient(
-                                            listOf(
-                                                EmeraldDark.copy(alpha = 0.9f),
-                                                Color(0xFF070B14)
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                // Animated drawing checkmark
-                                Canvas(modifier = Modifier.size(50.dp)) {
-                                    val w = size.width
-                                    val h = size.height
-                                    val p = checkProgress.value
-
-                                    if (p > 0f) {
-                                        val midX = w * 0.44f
-                                        val midY = h * 0.72f
-                                        val startX = w * 0.22f
-                                        val startY = h * 0.52f
-                                        val endX = w * 0.78f
-                                        val endY = h * 0.32f
-
-                                        if (p <= 0.4f) {
-                                            val subProgress = p / 0.4f
-                                            drawLine(
-                                                color = Color.White,
-                                                start = androidx.compose.ui.geometry.Offset(startX, startY),
-                                                end = androidx.compose.ui.geometry.Offset(
-                                                    startX + (midX - startX) * subProgress,
-                                                    startY + (midY - startY) * subProgress
-                                                ),
-                                                strokeWidth = 6.5.dp.toPx(),
-                                                cap = StrokeCap.Round
-                                            )
-                                        } else {
-                                            // Full first leg
-                                            drawLine(
-                                                color = Color.White,
-                                                start = androidx.compose.ui.geometry.Offset(startX, startY),
-                                                end = androidx.compose.ui.geometry.Offset(midX, midY),
-                                                strokeWidth = 6.5.dp.toPx(),
-                                                cap = StrokeCap.Round
-                                            )
-                                            // Second leg
-                                            val subProgress = (p - 0.4f) / 0.6f
-                                            drawLine(
-                                                color = Color.White,
-                                                start = androidx.compose.ui.geometry.Offset(midX, midY),
-                                                end = androidx.compose.ui.geometry.Offset(
-                                                    midX + (endX - midX) * subProgress,
-                                                    midY + (endY - midY) * subProgress
-                                                ),
-                                                strokeWidth = 6.5.dp.toPx(),
-                                                cap = StrokeCap.Round
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Floating cute sparkles & stars with gentle bobbing
-                        Text(
-                            "✨",
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(y = floatOffset.dp)
-                                .scale(1.25f)
-                        )
-                        Text(
-                            "🎉",
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .offset(y = (-floatOffset).dp)
-                                .scale(1.15f)
-                        )
-                        Text(
-                            "💰",
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .offset(x = floatOffset.dp)
-                                .scale(1.15f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // Main celebration text
-                    Text(
-                        text = "₹${amount.toInt()} Jud Gaya Malikk! ✨",
-                        fontSize = 25.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TextPrimary,
-                        textAlign = TextAlign.Center,
-                        letterSpacing = 0.4.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Surface(
-                        color = GoldPrimary.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.45f))
-                    ) {
-                        Text(
-                            text = "Category: $categoryName",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GoldLight,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "✓ Room Database & Cloud Firestore me surakshit",
-                        fontSize = 12.sp,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Composable
 fun HumorousBudgetDialog(
     categoryName: String,
@@ -714,8 +420,6 @@ fun HumorousBudgetDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = SurfaceElevated,
-        titleContentColor = OrangeWarning,
-        textContentColor = TextPrimary,
         shape = RoundedCornerShape(20.dp),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -723,33 +427,33 @@ fun HumorousBudgetDialog(
                     imageVector = Icons.Default.WarningAmber,
                     contentDescription = null,
                     tint = OrangeWarning,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Budget Alert!", fontWeight = FontWeight.Bold)
+                Text("Budget Alert", fontWeight = FontWeight.Bold, color = TextPrimary)
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Iss mahine already bhot kharcha ho gaya MALIKK 😭",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
-                    color = GoldLight
-                )
-                Text(
-                    text = "$categoryName: Monthly Budget ₹${limit.toInt()}",
-                    fontSize = 14.sp,
+                    text = "$categoryName ki monthly budget limit exceed ho rahi hai.",
                     fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
                     color = TextPrimary
                 )
                 Text(
-                    text = "Ab tak ka kharcha: ₹${alreadySpent.toInt()} + Yeh kharcha: ₹${currentExpense.toInt()} = Total: ₹${projectedSpent.toInt()}",
+                    text = "Budget Limit: ₹${limit.toInt()}",
                     fontSize = 13.sp,
+                    color = GoldLight,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "Ab tak: ₹${alreadySpent.toInt()}  •  Naya: ₹${currentExpense.toInt()}  •  Total: ₹${projectedSpent.toInt()}",
+                    fontSize = 12.sp,
                     color = TextSecondary
                 )
                 Text(
-                    text = "✓ Kharcha record ho chuka hai (KHARCHA kabhi entry nahi rokta).",
+                    text = "✓ Kharcha record ho gaya hai.",
                     fontSize = 12.sp,
                     color = EmeraldCash,
                     fontWeight = FontWeight.Medium
@@ -758,7 +462,7 @@ fun HumorousBudgetDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Theek Hai Malikk", color = GoldPrimary, fontWeight = FontWeight.Bold)
+                Text("OK", color = GoldPrimary, fontWeight = FontWeight.Bold)
             }
         }
     )

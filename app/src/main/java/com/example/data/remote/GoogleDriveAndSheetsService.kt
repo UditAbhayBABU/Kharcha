@@ -76,6 +76,64 @@ class GoogleDriveAndSheetsService(
     }
 
     /**
+     * Creates a new Google Spreadsheet in the user's Google Drive via Sheets API or Drive API.
+     */
+    suspend fun createGoogleSpreadsheet(accessToken: String, fileName: String, sheetName: String = "KHARCHA"): Result<DriveFileItem> = withContext(Dispatchers.IO) {
+        if (accessToken.isBlank()) {
+            return@withContext Result.failure(IllegalStateException("Google Account access token missing hai"))
+        }
+
+        val cleanTitle = if (fileName.isBlank()) "KHARCHA_Expenses_Master" else fileName.removeSuffix(".xlsx").removeSuffix(".csv")
+        val cleanSheet = if (sheetName.isBlank()) "KHARCHA" else sheetName
+
+        try {
+            // First attempt: Sheets API v4 (spreadsheets.create)
+            val sheetsReqBody = JSONObject().apply {
+                put("properties", JSONObject().apply {
+                    put("title", cleanTitle)
+                })
+                put("sheets", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("properties", JSONObject().apply {
+                            put("title", cleanSheet)
+                            put("gridProperties", JSONObject().apply {
+                                put("rowCount", 1000)
+                                put("columnCount", 15)
+                            })
+                        })
+                    })
+                })
+            }
+
+            val sheetsRequest = Request.Builder()
+                .url("https://sheets.googleapis.com/v4/spreadsheets")
+                .addHeader("Authorization", "Bearer $accessToken")
+                .post(sheetsReqBody.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val sheetsResponse = client.newCall(sheetsRequest).execute()
+            val sheetsBody = sheetsResponse.body?.string() ?: ""
+
+            if (sheetsResponse.isSuccessful) {
+                val json = JSONObject(sheetsBody)
+                val sheetId = json.optString("spreadsheetId")
+                val item = DriveFileItem(
+                    id = sheetId,
+                    name = cleanTitle,
+                    mimeType = "application/vnd.google-apps.spreadsheet"
+                )
+                initializeSheetHeaders(accessToken, sheetId, cleanSheet)
+                return@withContext Result.success(item)
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "Sheets API v4 create fallback to Drive: ${e.message}")
+        }
+
+        // Fallback attempt: Drive API v3 (files.create)
+        return@withContext createKharchaWorkbookInDrive(accessToken, cleanTitle)
+    }
+
+    /**
      * Creates a new KHARCHA Master workbook in the user's Google Drive.
      */
     suspend fun createKharchaWorkbookInDrive(accessToken: String, fileName: String): Result<DriveFileItem> = withContext(Dispatchers.IO) {
@@ -84,9 +142,9 @@ class GoogleDriveAndSheetsService(
         }
 
         try {
-            // Create a Google Sheet or CSV in Google Drive
+            val title = if (fileName.isBlank()) "KHARCHA_Expenses_Master" else fileName.removeSuffix(".xlsx")
             val metaObj = JSONObject().apply {
-                put("name", if (fileName.isBlank()) "KHARCHA_Expenses_Master.xlsx" else fileName)
+                put("name", title)
                 put("mimeType", "application/vnd.google-apps.spreadsheet")
             }
 
@@ -103,13 +161,11 @@ class GoogleDriveAndSheetsService(
                 val json = JSONObject(responseBody)
                 val fileItem = DriveFileItem(
                     id = json.optString("id"),
-                    name = json.optString("name"),
-                    mimeType = json.optString("mimeType")
+                    name = json.optString("name", title),
+                    mimeType = json.optString("mimeType", "application/vnd.google-apps.spreadsheet")
                 )
 
-                // Initialize header row in the new sheet
                 initializeSheetHeaders(accessToken, fileItem.id, "KHARCHA")
-
                 Result.success(fileItem)
             } else {
                 Log.e(tag, "Drive create file error: code ${response.code} body: $responseBody")
@@ -119,6 +175,35 @@ class GoogleDriveAndSheetsService(
             Log.e(tag, "Create file error: ${e.message}", e)
             Result.failure(e)
         }
+    }
+
+    /**
+     * Generates CSV content suitable for direct Google Sheets or Google Drive import/share.
+     */
+    fun generateKharchaCsvContent(expenses: List<ExpenseEntity>): String {
+        val sb = StringBuilder()
+        sb.append("Transaction ID,Date,Time,Amount,Category,Context,Business,Payment Method,Udhaar Person,Pot,Note,Created At\n")
+        for (item in expenses) {
+            val d = Date(item.dateMillis)
+            val escape = { s: String ->
+                if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+                    "\"" + s.replace("\"", "\"\"") + "\""
+                } else s
+            }
+            sb.append("${escape(item.id)},")
+            sb.append("${dateFormat.format(d)},")
+            sb.append("${timeFormat.format(d)},")
+            sb.append("${item.amount},")
+            sb.append("${escape(item.category)},")
+            sb.append("${escape(item.contextType)},")
+            sb.append("${escape(item.businessName ?: "-")},")
+            sb.append("${escape(item.paymentMethod)},")
+            sb.append("${escape(item.udhaarPersonName ?: "-")},")
+            sb.append("${escape(item.potName ?: "-")},")
+            sb.append("${escape(item.note)},")
+            sb.append("${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(item.createdAt))}\n")
+        }
+        return sb.toString()
     }
 
     /**
