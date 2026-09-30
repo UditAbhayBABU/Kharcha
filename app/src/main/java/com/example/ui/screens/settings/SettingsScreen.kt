@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,6 +53,7 @@ fun SettingsScreen(
     onNavigateToSheetsSync: () -> Unit,
     onNavigateToExcelSync: () -> Unit,
     onNavigateToGoogleDriveAndSheets: () -> Unit,
+    onNavigateToAnalysis: () -> Unit,
     onNavigateToAdmin: () -> Unit,
     onSetPin: (String) -> Unit,
     onDisablePin: () -> Unit,
@@ -138,6 +140,32 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // REPORTS & ANALYSIS SECTION
+            item {
+                Text(
+                    text = "Reports & Insights",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(SurfaceCard)
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                ) {
+                    SettingsItem(
+                        icon = Icons.Outlined.QueryStats,
+                        iconTint = GoldPrimary,
+                        title = "Analysis",
+                        subtitle = "Kharcha hisab, category breakdown & monthly trends",
+                        onClick = onNavigateToAnalysis
+                    )
                 }
             }
 

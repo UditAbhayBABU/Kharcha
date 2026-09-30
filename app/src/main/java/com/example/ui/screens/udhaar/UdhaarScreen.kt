@@ -28,8 +28,12 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.UdhaarEntry
 import com.example.data.model.UdhaarParty
 import com.example.ui.components.KharchaCard
+import com.example.ui.components.LedgerTarget
+import com.example.ui.components.LedgerType
+import com.example.ui.components.ProvideSafeTextToolbar
 import com.example.ui.components.TactileButton
 import com.example.ui.components.TactileChip
+import com.example.ui.components.UniversalLedgerSheet
 import com.example.ui.theme.*
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
@@ -45,7 +49,8 @@ fun UdhaarScreen(
     onAddParty: (UdhaarParty) -> Unit,
     onRecordTransaction: (partyId: String, amount: Double, isRepayment: Boolean, note: String) -> Unit,
     onGetPartyEntries: (partyId: String) -> Flow<List<UdhaarEntry>>,
-    onDeleteParty: (String) -> Unit
+    onDeleteParty: (String) -> Unit,
+    onDeleteUdhaarEntry: ((entryId: String, partyId: String) -> Unit)? = null
 ) {
     var showAddPartyDialog by remember { mutableStateOf(false) }
     var selectedPartyForLedger by remember { mutableStateOf<UdhaarParty?>(null) }
@@ -223,21 +228,29 @@ fun UdhaarScreen(
             )
         }
 
-        // FULL PARTY LEDGER DIALOG / SHEET
+        // FULL PARTY LEDGER DIALOG / SHEET (Universal Ledger Sheet with search, filter, export & row deletion)
         selectedPartyForLedger?.let { party ->
             val entriesFlow = remember(party.id) { onGetPartyEntries(party.id) }
             val entries by entriesFlow.collectAsState(initial = emptyList())
 
-            UdhaarLedgerSheet(
-                party = party,
-                entries = entries,
+            UniversalLedgerSheet(
+                target = LedgerTarget(
+                    type = LedgerType.UDHAAR_PARTY,
+                    id = party.id,
+                    title = party.name,
+                    subtitle = if (party.phone.isNotBlank()) "Phone: ${party.phone}" else "Udhaar Khata",
+                    currentBalance = party.outstandingBalance,
+                    icon = Icons.Default.SwapHoriz
+                ),
+                allExpenses = emptyList(),
+                udhaarEntries = entries,
                 onDismiss = { selectedPartyForLedger = null },
-                onRecordTransaction = { amount, isRepayment, note ->
-                    onRecordTransaction(party.id, amount, isRepayment, note)
+                onDeleteExpense = {},
+                onDeleteUdhaarEntry = { entry ->
+                    onDeleteUdhaarEntry?.invoke(entry.id, party.id)
                 },
-                onDeleteParty = {
-                    onDeleteParty(party.id)
-                    selectedPartyForLedger = null
+                onAddUdhaarEntry = { partyId, amount, isRepayment, note ->
+                    onRecordTransaction(partyId, amount, isRepayment, note)
                 }
             )
         }
@@ -594,12 +607,13 @@ fun UdhaarLedgerSheet(
         containerColor = BackgroundDark,
         dragHandle = { BottomSheetDefaults.DragHandle(color = BorderMedium) }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .fillMaxHeight(0.85f)
-        ) {
+        ProvideSafeTextToolbar {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxHeight(0.85f)
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -701,6 +715,7 @@ fun UdhaarLedgerSheet(
                 }
             }
         }
+    }
     }
 
     if (showEntryDialog) {

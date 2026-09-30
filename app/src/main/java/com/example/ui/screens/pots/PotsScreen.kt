@@ -1,6 +1,7 @@
 package com.example.ui.screens.pots
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,9 +22,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.Expense
 import com.example.data.model.Pot
 import com.example.ui.components.KharchaCard
+import com.example.ui.components.LedgerTarget
+import com.example.ui.components.LedgerType
 import com.example.ui.components.TactileButton
+import com.example.ui.components.UniversalLedgerSheet
 import com.example.ui.theme.*
 import java.util.UUID
 
@@ -32,12 +37,15 @@ import java.util.UUID
 fun PotsScreen(
     userId: String,
     pots: List<Pot>,
+    allExpenses: List<Expense> = emptyList(),
     onAddPot: (Pot) -> Unit,
     onDepositToPot: (potId: String, amount: Double) -> Unit,
-    onDeletePot: (String) -> Unit
+    onDeletePot: (String) -> Unit,
+    onDeleteExpense: ((Expense) -> Unit)? = null
 ) {
     var showCreatePotDialog by remember { mutableStateOf(false) }
     var selectedPotForDeposit by remember { mutableStateOf<Pot?>(null) }
+    var selectedPotForLedger by remember { mutableStateOf<Pot?>(null) }
 
     val totalPotBalance = pots.sumOf { it.currentBalance }
 
@@ -173,7 +181,8 @@ fun PotsScreen(
                             PotCard(
                                 pot = pot,
                                 onDeposit = { selectedPotForDeposit = pot },
-                                onDelete = { onDeletePot(pot.id) }
+                                onDelete = { onDeletePot(pot.id) },
+                                onOpenLedger = { selectedPotForLedger = pot }
                             )
                         }
                     }
@@ -204,6 +213,29 @@ fun PotsScreen(
                 }
             )
         }
+
+        // UNIVERSAL LEDGER SHEET FOR POT
+        selectedPotForLedger?.let { pot ->
+            UniversalLedgerSheet(
+                target = LedgerTarget(
+                    type = LedgerType.POT,
+                    id = pot.id,
+                    title = pot.name,
+                    subtitle = "Gullak Passbook • Target: ₹${pot.targetAmount.toInt()}",
+                    targetAmount = pot.targetAmount,
+                    currentBalance = pot.currentBalance,
+                    icon = Icons.Default.Savings
+                ),
+                allExpenses = allExpenses,
+                onDismiss = { selectedPotForLedger = null },
+                onDeleteExpense = { exp ->
+                    onDeleteExpense?.invoke(exp)
+                },
+                onAddDepositToPot = { potId, amount ->
+                    onDepositToPot(potId, amount)
+                }
+            )
+        }
     }
 }
 
@@ -211,7 +243,8 @@ fun PotsScreen(
 fun PotCard(
     pot: Pot,
     onDeposit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onOpenLedger: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val progress = if (pot.targetAmount > 0) {
@@ -221,6 +254,7 @@ fun PotCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onOpenLedger)
             .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp)),
         color = SurfaceCard,
         shape = RoundedCornerShape(16.dp),
@@ -311,19 +345,38 @@ fun PotCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            Button(
-                onClick = onDeposit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(38.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SurfaceElevated, contentColor = GoldPrimary),
-                shape = RoundedCornerShape(10.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Is Gullak Me Paise Daalo", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                OutlinedButton(
+                    onClick = onOpenLedger,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, BorderMedium),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+                ) {
+                    Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(15.dp), tint = GoldPrimary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Passbook", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                Button(
+                    onClick = onDeposit,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SurfaceElevated, contentColor = GoldPrimary),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("+ Jama", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

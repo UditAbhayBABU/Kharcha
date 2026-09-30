@@ -2,6 +2,7 @@ package com.example.ui.screens.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +22,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Business
 import com.example.data.model.CategoryItem
+import com.example.data.model.Expense
+import com.example.ui.components.LedgerTarget
+import com.example.ui.components.LedgerType
 import com.example.ui.components.TactileButton
+import com.example.ui.components.UniversalLedgerSheet
 import com.example.ui.theme.*
 import java.util.UUID
 
@@ -30,11 +35,14 @@ import java.util.UUID
 fun BusinessManagementScreen(
     userId: String,
     businesses: List<Business>,
+    allExpenses: List<Expense> = emptyList(),
     onAddBusiness: (Business) -> Unit,
     onDeleteBusiness: (String) -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onDeleteExpense: ((Expense) -> Unit)? = null
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var selectedBusinessForLedger by remember { mutableStateOf<Business?>(null) }
 
     Scaffold(
         containerColor = BackgroundDark,
@@ -93,6 +101,7 @@ fun BusinessManagementScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clickable { selectedBusinessForLedger = biz }
                                 .border(1.dp, BorderSubtle, RoundedCornerShape(14.dp)),
                             color = SurfaceCard,
                             shape = RoundedCornerShape(14.dp)
@@ -122,8 +131,13 @@ fun BusinessManagementScreen(
                                         }
                                     }
                                 }
-                                IconButton(onClick = { onDeleteBusiness(biz.id) }) {
-                                    Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = TextMuted)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { selectedBusinessForLedger = biz }) {
+                                        Icon(Icons.Default.ReceiptLong, contentDescription = "Khata Dekhein", tint = GoldPrimary)
+                                    }
+                                    IconButton(onClick = { onDeleteBusiness(biz.id) }) {
+                                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = TextMuted)
+                                    }
                                 }
                             }
                         }
@@ -139,6 +153,24 @@ fun BusinessManagementScreen(
                 onAdd = {
                     onAddBusiness(it)
                     showAddDialog = false
+                }
+            )
+        }
+
+        // UNIVERSAL LEDGER SHEET FOR BUSINESS
+        selectedBusinessForLedger?.let { biz ->
+            UniversalLedgerSheet(
+                target = LedgerTarget(
+                    type = LedgerType.BUSINESS,
+                    id = biz.id,
+                    title = biz.name,
+                    subtitle = if (biz.gstOrRegNo.isNotBlank()) "GST: ${biz.gstOrRegNo}" else "Business Khata Passbook",
+                    icon = Icons.Default.Business
+                ),
+                allExpenses = allExpenses,
+                onDismiss = { selectedBusinessForLedger = null },
+                onDeleteExpense = { exp ->
+                    onDeleteExpense?.invoke(exp)
                 }
             )
         }
@@ -221,11 +253,14 @@ fun AddBusinessDialog(
 fun CategoryManagementScreen(
     userId: String,
     categories: List<CategoryItem>,
+    allExpenses: List<Expense> = emptyList(),
     onAddCategory: (CategoryItem) -> Unit,
     onDeleteCategory: (String) -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onDeleteExpense: ((Expense) -> Unit)? = null
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var selectedCategoryForLedger by remember { mutableStateOf<CategoryItem?>(null) }
 
     Scaffold(
         containerColor = BackgroundDark,
@@ -260,6 +295,7 @@ fun CategoryManagementScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { selectedCategoryForLedger = cat }
                             .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp)),
                         color = SurfaceCard,
                         shape = RoundedCornerShape(12.dp)
@@ -272,9 +308,14 @@ fun CategoryManagementScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(text = cat.name, fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 15.sp)
-                            if (!cat.isDefault) {
-                                IconButton(onClick = { onDeleteCategory(cat.id) }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = TextMuted)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { selectedCategoryForLedger = cat }) {
+                                    Icon(Icons.Default.ReceiptLong, contentDescription = "Khata Dekhein", tint = GoldPrimary)
+                                }
+                                if (!cat.isDefault) {
+                                    IconButton(onClick = { onDeleteCategory(cat.id) }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = TextMuted)
+                                    }
                                 }
                             }
                         }
@@ -325,6 +366,23 @@ fun CategoryManagementScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddDialog = false }) { Text("Ruko", color = TextSecondary) }
+                }
+            )
+        }
+
+        // UNIVERSAL LEDGER SHEET FOR CATEGORY
+        selectedCategoryForLedger?.let { cat ->
+            UniversalLedgerSheet(
+                target = LedgerTarget(
+                    type = LedgerType.CATEGORY,
+                    id = cat.name,
+                    title = "${cat.name} Khata",
+                    subtitle = "Category Passbook"
+                ),
+                allExpenses = allExpenses,
+                onDismiss = { selectedCategoryForLedger = null },
+                onDeleteExpense = { exp ->
+                    onDeleteExpense?.invoke(exp)
                 }
             )
         }

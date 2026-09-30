@@ -82,6 +82,12 @@ interface KharchaDao {
     @Query("SELECT * FROM pots WHERE id = :id LIMIT 1")
     suspend fun getPotById(id: String): PotEntity?
 
+    @Query("SELECT * FROM pots WHERE userId = :userId")
+    suspend fun getPotsList(userId: String): List<PotEntity>
+
+    @Query("SELECT * FROM pots WHERE userId = :userId AND (id = :potId OR name = :potName) LIMIT 1")
+    suspend fun findPot(userId: String, potId: String?, potName: String?): PotEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPot(pot: PotEntity)
 
@@ -97,6 +103,9 @@ interface KharchaDao {
 
     @Query("SELECT * FROM udhaar_parties WHERE id = :id LIMIT 1")
     suspend fun getUdhaarPartyById(id: String): UdhaarPartyEntity?
+
+    @Query("SELECT * FROM udhaar_parties WHERE userId = :userId AND (id = :partyId OR name = :partyName) LIMIT 1")
+    suspend fun findUdhaarParty(userId: String, partyId: String?, partyName: String?): UdhaarPartyEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUdhaarParty(party: UdhaarPartyEntity)
@@ -122,6 +131,9 @@ interface KharchaDao {
 
     @Query("DELETE FROM udhaar_entries WHERE id = :id")
     suspend fun deleteUdhaarEntryById(id: String)
+
+    @Query("SELECT * FROM udhaar_entries WHERE id = :id LIMIT 1")
+    suspend fun getUdhaarEntryById(id: String): UdhaarEntryEntity?
 
     // --- RECURRING EXPENSES ---
     @Query("SELECT * FROM recurring_expenses WHERE userId = :userId ORDER BY nextDueMillis ASC")

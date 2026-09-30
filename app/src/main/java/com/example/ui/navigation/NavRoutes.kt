@@ -7,7 +7,7 @@ sealed class Screen(val route: String, val title: String) {
     object History : Screen("history", "Kharche")
     object Udhaar : Screen("udhaar", "Udhaar")
     object Pots : Screen("pots", "Gullak")
-    object Analysis : Screen("analysis", "Hisab")
+    object Analysis : Screen("analysis", "Analysis")
     object Settings : Screen("settings", "Settings")
     object BusinessManagement : Screen("manage_businesses", "Business Khata")
     object CategoryManagement : Screen("manage_categories", "Categories")

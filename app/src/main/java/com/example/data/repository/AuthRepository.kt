@@ -5,6 +5,10 @@ import android.content.SharedPreferences
 import com.example.data.model.UserProfile
 import com.example.data.remote.FirestoreSyncManager
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
@@ -77,6 +81,40 @@ class AuthRepository(
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    fun formatAuthErrorMessage(e: Throwable): String {
+        val msg = e.localizedMessage.orEmpty()
+        return when {
+            e is FirebaseAuthInvalidCredentialsException ||
+            msg.contains("credential is incorrect", ignoreCase = true) ||
+            msg.contains("malformed or has expired", ignoreCase = true) ||
+            msg.contains("password is invalid", ignoreCase = true) -> {
+                "Email ya Password galat hai. Agar aapne abhi tak account nahi banaya hai, toh kripya 'Register Karo' par click karke naya account banayein."
+            }
+            e is FirebaseAuthInvalidUserException ||
+            msg.contains("no user record", ignoreCase = true) ||
+            msg.contains("user may have been deleted", ignoreCase = true) -> {
+                "Is Email se koi account nahi mila. Kripya pehle 'Register Karo' par jakar apna account banayein."
+            }
+            e is FirebaseAuthUserCollisionException ||
+            msg.contains("already in use", ignoreCase = true) -> {
+                "Is email se pehle se hi account bana hua hai. Kripya 'Login Karo' par click karein."
+            }
+            e is FirebaseAuthWeakPasswordException ||
+            msg.contains("password should be at least", ignoreCase = true) -> {
+                "Password kam se kam 6 akshar ka hona chahiye."
+            }
+            msg.contains("blocked all requests", ignoreCase = true) ||
+            msg.contains("too many requests", ignoreCase = true) -> {
+                "Bohot baar galat prayas hua. Kripya thodi der baad try karein ya Password reset karein."
+            }
+            msg.contains("network", ignoreCase = true) ||
+            msg.contains("timeout", ignoreCase = true) -> {
+                "Internet connection me samasya hai. Kripya data/Wi-Fi check karein."
+            }
+            else -> msg.ifBlank { "Authentication me samasya aayi. Kripya dubara koshish karein." }
         }
     }
 

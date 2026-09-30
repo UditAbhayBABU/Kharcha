@@ -40,6 +40,9 @@ fun AuthScreen(
     var name by remember { mutableStateOf("") }
     var showForgotDialog by remember { mutableStateOf(false) }
     var showGoogleDirectDialog by remember { mutableStateOf(false) }
+    var localValidationError by remember { mutableStateOf<String?>(null) }
+
+    val activeError = localValidationError ?: errorMessage
 
     Box(
         modifier = Modifier
@@ -85,7 +88,7 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (errorMessage != null) {
+            if (activeError != null) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = RedExpense.copy(alpha = 0.15f),
@@ -112,11 +115,62 @@ fun AuthScreen(
                             )
                         }
                         Text(
-                            text = errorMessage,
+                            text = activeError,
                             color = TextPrimary,
                             fontSize = 12.sp,
                             lineHeight = 17.sp
                         )
+
+                        // Actionable helpers depending on error context
+                        if (!isRegisterMode) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        isRegisterMode = true
+                                        localValidationError = null
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = GoldPrimary,
+                                        contentColor = TextOnGold
+                                    )
+                                ) {
+                                    Text("Naya Account Banayein", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showForgotDialog = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, GoldPrimary),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = SurfaceDark,
+                                        contentColor = GoldLight
+                                    )
+                                ) {
+                                    Text("Reset Link", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    isRegisterMode = false
+                                    localValidationError = null
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = GoldPrimary,
+                                    contentColor = TextOnGold
+                                )
+                            ) {
+                                Text("Pehle Se Account Hai? Login Karein", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
                         if (onGoogleDirectLogin != null) {
                             OutlinedButton(
                                 onClick = { showGoogleDirectDialog = true },
@@ -130,7 +184,7 @@ fun AuthScreen(
                             ) {
                                 Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp), tint = GoldPrimary)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Google Account Se Turant Login Karein", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Google Account Se Turant Connect Karein", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -204,10 +258,36 @@ fun AuthScreen(
             TactileButton(
                 text = if (isRegisterMode) "Account Banao" else "Login Karo",
                 onClick = {
+                    localValidationError = null
+                    val cleanEmail = email.trim()
+                    val cleanPass = password.trim()
+                    val cleanName = name.trim()
+
+                    if (cleanEmail.isBlank()) {
+                        localValidationError = "Kripya apna email darj karein"
+                        return@TactileButton
+                    }
+                    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+                        localValidationError = "Kripya sahi email address darj karein (e.g. name@gmail.com)"
+                        return@TactileButton
+                    }
+                    if (cleanPass.isBlank()) {
+                        localValidationError = "Kripya password darj karein"
+                        return@TactileButton
+                    }
+                    if (cleanPass.length < 6) {
+                        localValidationError = "Password kam se kam 6 akshar ka hona chahiye"
+                        return@TactileButton
+                    }
+                    if (isRegisterMode && cleanName.isBlank()) {
+                        localValidationError = "Kripya apna naam darj karein"
+                        return@TactileButton
+                    }
+
                     if (isRegisterMode) {
-                        onSignUp(email.trim(), password.trim(), name.trim())
+                        onSignUp(cleanEmail, cleanPass, cleanName)
                     } else {
-                        onSignIn(email.trim(), password.trim())
+                        onSignIn(cleanEmail, cleanPass)
                     }
                 },
                 isLoading = isLoading,
@@ -265,7 +345,12 @@ fun AuthScreen(
                 }
             }
 
-            TextButton(onClick = { isRegisterMode = !isRegisterMode }) {
+            TextButton(
+                onClick = {
+                    isRegisterMode = !isRegisterMode
+                    localValidationError = null
+                }
+            ) {
                 Text(
                     text = if (isRegisterMode) "Pehle se account hai? Login Karo" else "Naya account banana hai? Register Karo",
                     color = TextSecondary,

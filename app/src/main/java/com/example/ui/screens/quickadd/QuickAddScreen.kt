@@ -1,8 +1,10 @@
 package com.example.ui.screens.quickadd
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,10 +23,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,6 +42,7 @@ import com.example.ui.components.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,9 +59,16 @@ fun QuickAddScreen(
     onNavigateBack: () -> Unit,
     snackbarHostState: SnackbarHostState
 ) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    // State for Quick Add button container ripple effect overlay upon successful entry
+    var isSuccessConfirmed by remember { mutableStateOf(false) }
+    val buttonRippleProgress = remember { Animatable(0f) }
+    val buttonSpringScale = remember { Animatable(1f) }
 
     var amountString by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(categories.firstOrNull()?.name ?: "Khana & Peena") }
@@ -469,76 +484,184 @@ fun QuickAddScreen(
                 }
             }
 
-            // 6. SAVE EXPENSE BUTTON (Big, Bold, 1-Tap)
-            TactileButton(
-                text = "Kharcha Jodo  ₹${if (amountValue > 0) amountString else "0"}",
-                icon = Icons.Default.Check,
-                onClick = {
-                    if (amountValue <= 0) return@TactileButton
-                    focusManager.clearFocus(force = true)
-                    keyboardController?.hide()
+            // 6. SAVE EXPENSE BUTTON WITH CONFIRMATION RIPPLE OVERLAY CONTAINER
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .graphicsLayer {
+                        scaleX = buttonSpringScale.value
+                        scaleY = buttonSpringScale.value
+                    }
+                    .clip(RoundedCornerShape(16.dp))
+            ) {
+                TactileButton(
+                    text = if (isSuccessConfirmed) "✓ Note Ho Gaya!" else "Kharcha Jodo  ₹${if (amountValue > 0) amountString else "0"}",
+                    icon = if (isSuccessConfirmed) Icons.Default.CheckCircle else Icons.Default.Check,
+                    accentColor = if (isSuccessConfirmed) EmeraldCash else GoldPrimary,
+                    onClick = {
+                        if (amountValue <= 0) return@TactileButton
+                        focusManager.clearFocus(force = true)
+                        keyboardController?.hide()
 
-                    val selectedBiz = businesses.find { it.id == selectedBusinessId }
-                    val selectedPot = pots.find { it.id == selectedPotId }
-                    val selectedUdhaar = udhaarParties.find { it.id == selectedUdhaarPartyId }
+                        val selectedBiz = businesses.find { it.id == selectedBusinessId }
+                        val selectedPot = pots.find { it.id == selectedPotId }
+                        val selectedUdhaar = udhaarParties.find { it.id == selectedUdhaarPartyId }
 
-                    // Check monthly budget if enabled
-                    // Informational warning only: NEVER blocks saving or alters the expense.
-                    if (isBudgetFeatureEnabled) {
-                        val budget = budgets.find { it.categoryName == selectedCategory && it.isEnabled }
-                        if (budget != null) {
-                            val cal = java.util.Calendar.getInstance()
-                            cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
-                            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                            cal.set(java.util.Calendar.MINUTE, 0)
-                            cal.set(java.util.Calendar.SECOND, 0)
-                            cal.set(java.util.Calendar.MILLISECOND, 0)
-                            val monthStartMillis = cal.timeInMillis
+                        // Check monthly budget if enabled
+                        if (isBudgetFeatureEnabled) {
+                            val budget = budgets.find { it.categoryName == selectedCategory && it.isEnabled }
+                            if (budget != null) {
+                                val cal = java.util.Calendar.getInstance()
+                                cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+                                cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                                cal.set(java.util.Calendar.MINUTE, 0)
+                                cal.set(java.util.Calendar.SECOND, 0)
+                                cal.set(java.util.Calendar.MILLISECOND, 0)
+                                val monthStartMillis = cal.timeInMillis
 
-                            val alreadySpent = allExpenses
-                                .filter { it.category == selectedCategory && it.dateMillis >= monthStartMillis }
-                                .sumOf { it.amount }
+                                val alreadySpent = allExpenses
+                                    .filter { it.category == selectedCategory && it.dateMillis >= monthStartMillis }
+                                    .sumOf { it.amount }
 
-                            val projected = alreadySpent + amountValue
-                            if (projected > budget.monthlyLimit) {
-                                exceededBudgetName = selectedCategory
-                                exceededBudgetLimit = budget.monthlyLimit
-                                exceededAlreadySpent = alreadySpent
-                                exceededCurrentExpense = amountValue
-                                exceededProjectedSpent = projected
-                                showBudgetWarningDialog = true
+                                val projected = alreadySpent + amountValue
+                                if (projected > budget.monthlyLimit) {
+                                    exceededBudgetName = selectedCategory
+                                    exceededBudgetLimit = budget.monthlyLimit
+                                    exceededAlreadySpent = alreadySpent
+                                    exceededCurrentExpense = amountValue
+                                    exceededProjectedSpent = projected
+                                    showBudgetWarningDialog = true
+                                }
                             }
                         }
+
+                        val expense = Expense(
+                            id = "kh_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}",
+                            userId = userId,
+                            amount = amountValue,
+                            dateMillis = System.currentTimeMillis(),
+                            category = selectedCategory,
+                            note = note.trim(),
+                            paymentMethod = selectedPaymentMethod,
+                            contextType = selectedContext,
+                            businessId = if (selectedContext == ContextType.BUSINESS) selectedBusinessId else null,
+                            businessName = if (selectedContext == ContextType.BUSINESS) selectedBiz?.name else null,
+                            potId = selectedPotId,
+                            potName = selectedPot?.name,
+                            udhaarPersonId = selectedUdhaarPartyId,
+                            udhaarPersonName = selectedUdhaar?.name
+                        )
+
+                        // 1. PHYSICAL CONFIRMATION: Subtle affirmative haptic feedback
+                        SubtleHapticHelper.playSubtleTickComplete(context, haptic)
+
+                        // 2. VISUAL CONFIRMATION: Button container ripple effect & spring reaction
+                        coroutineScope.launch {
+                            isSuccessConfirmed = true
+                            buttonSpringScale.animateTo(
+                                0.94f,
+                                spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium)
+                            )
+                            buttonSpringScale.animateTo(
+                                1.0f,
+                                spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow)
+                            )
+                        }
+                        coroutineScope.launch {
+                            buttonRippleProgress.snapTo(0f)
+                            buttonRippleProgress.animateTo(
+                                targetValue = 1f,
+                                animationSpec = tween(durationMillis = 650, easing = FastOutSlowInEasing)
+                            )
+                            isSuccessConfirmed = false
+                        }
+
+                        // Save expense
+                        onSaveExpense(expense)
+
+                        // Reset for next entry without switching tabs
+                        amountString = ""
+                        note = ""
+                        selectedPotId = null
+                        selectedUdhaarPartyId = null
+                    },
+                    enabled = amountValue > 0,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // 3. RIPPLE EFFECT OVERLAY DIRECTLY ON THE BUTTON CONTAINER
+                if (isSuccessConfirmed) {
+                    val p = buttonRippleProgress.value
+                    val alpha = (1f - p * p).coerceIn(0f, 1f)
+
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val w = size.width
+                        val h = size.height
+                        val cx = w / 2f
+                        val cy = h / 2f
+                        val maxR = max(w, h) * 0.72f
+                        val currentR = maxR * p
+
+                        // Expanding emerald-gold success halo
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    EmeraldCash.copy(alpha = alpha * 0.70f),
+                                    GoldPrimary.copy(alpha = alpha * 0.35f),
+                                    Color.Transparent
+                                ),
+                                center = Offset(cx, cy),
+                                radius = currentR.coerceAtLeast(1f)
+                            ),
+                            radius = currentR,
+                            center = Offset(cx, cy)
+                        )
+
+                        // Glowing expanding shockwave ring
+                        drawCircle(
+                            color = Color.White.copy(alpha = alpha * 0.90f),
+                            radius = currentR,
+                            center = Offset(cx, cy),
+                            style = Stroke(width = 3.dp.toPx() * (1f - p * 0.5f))
+                        )
+
+                        // Specular sheen sweep reflection across the button surface
+                        val sheenStart = (w * 1.5f * p) - (w * 0.5f)
+                        val sheenWidth = w * 0.35f
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = alpha * 0.45f),
+                                    Color.Transparent
+                                ),
+                                startX = sheenStart - sheenWidth,
+                                endX = sheenStart + sheenWidth
+                            ),
+                            size = Size(w, h)
+                        )
                     }
 
-                    val expense = Expense(
-                        id = "kh_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}",
-                        userId = userId,
-                        amount = amountValue,
-                        dateMillis = System.currentTimeMillis(),
-                        category = selectedCategory,
-                        note = note.trim(),
-                        paymentMethod = selectedPaymentMethod,
-                        contextType = selectedContext,
-                        businessId = if (selectedContext == ContextType.BUSINESS) selectedBusinessId else null,
-                        businessName = if (selectedContext == ContextType.BUSINESS) selectedBiz?.name else null,
-                        potId = selectedPotId,
-                        potName = selectedPot?.name,
-                        udhaarPersonId = selectedUdhaarPartyId,
-                        udhaarPersonName = selectedUdhaar?.name
+                    // Pulsing luminous border around the button perimeter
+                    val borderAlpha = (1f - p).coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(
+                                2.dp,
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        EmeraldCash.copy(alpha = borderAlpha),
+                                        Color.White.copy(alpha = borderAlpha),
+                                        GoldLight.copy(alpha = borderAlpha)
+                                    )
+                                ),
+                                RoundedCornerShape(16.dp)
+                            )
                     )
-
-                    onSaveExpense(expense)
-
-                    // Reset for next entry without switching tabs
-                    amountString = ""
-                    note = ""
-                    selectedPotId = null
-                    selectedUdhaarPartyId = null
-                },
-                enabled = amountValue > 0,
-                modifier = Modifier.fillMaxWidth()
-            )
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
         }

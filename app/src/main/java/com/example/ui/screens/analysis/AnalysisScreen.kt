@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,7 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.ui.components.KharchaCard
+import com.example.ui.components.LedgerTarget
+import com.example.ui.components.LedgerType
 import com.example.ui.components.TactileChip
+import com.example.ui.components.UniversalLedgerSheet
 import com.example.ui.theme.*
 import java.util.Calendar
 
@@ -31,9 +35,12 @@ fun AnalysisScreen(
     budgets: List<CategoryBudget>,
     isBudgetFeatureEnabled: Boolean,
     pots: List<Pot>,
-    udhaarParties: List<UdhaarParty>
+    udhaarParties: List<UdhaarParty>,
+    onNavigateBack: (() -> Unit)? = null,
+    onDeleteExpense: ((Expense) -> Unit)? = null
 ) {
     var selectedTimePeriod by remember { mutableStateOf("THIS_MONTH") } // THIS_MONTH, TODAY, ALL_TIME
+    var selectedLedgerTarget by remember { mutableStateOf<LedgerTarget?>(null) }
 
     val now = remember { Calendar.getInstance() }
     val currentMonth = now.get(Calendar.MONTH)
@@ -94,11 +101,22 @@ fun AnalysisScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Kharcha Hisab & Analysis",
+                        text = "Analysis",
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary,
                         fontSize = 19.sp
                     )
+                },
+                navigationIcon = {
+                    if (onNavigateBack != null) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Wapas",
+                                tint = TextPrimary
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark)
             )
@@ -172,12 +190,13 @@ fun AnalysisScreen(
                             color = GoldPrimary
                         )
 
-                        // Personal vs Business split
+                        // Personal vs Business split (clickable)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "Personal: ₹${personalTotal.toInt()}",
@@ -185,12 +204,38 @@ fun AnalysisScreen(
                                 color = TextPrimary,
                                 fontWeight = FontWeight.SemiBold
                             )
-                            Text(
-                                text = "Business: ₹${businessTotal.toInt()}",
-                                fontSize = 13.sp,
-                                color = BlueBank,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Surface(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        selectedLedgerTarget = LedgerTarget(
+                                            type = LedgerType.BUSINESS,
+                                            id = "all_business",
+                                            title = "All Business Khata",
+                                            icon = Icons.Default.Business
+                                        )
+                                    },
+                                color = BlueBank.copy(alpha = 0.15f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Business: ₹${businessTotal.toInt()}",
+                                        fontSize = 12.sp,
+                                        color = BlueBank,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Default.ReceiptLong,
+                                        contentDescription = "Ledger",
+                                        tint = BlueBank,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -278,6 +323,14 @@ fun AnalysisScreen(
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clickable {
+                                        selectedLedgerTarget = LedgerTarget(
+                                            type = LedgerType.CATEGORY,
+                                            id = catName,
+                                            title = "$catName Khata",
+                                            subtitle = "Category Passbook"
+                                        )
+                                    }
                                     .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp)),
                                 color = SurfaceCard,
                                 shape = RoundedCornerShape(12.dp)
@@ -285,9 +338,14 @@ fun AnalysisScreen(
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(text = catName, fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 14.sp)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(text = catName, fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Icon(Icons.Default.ReceiptLong, contentDescription = "Khata Dekhein", tint = GoldPrimary, modifier = Modifier.size(14.dp))
+                                        }
                                         Text(text = "₹${amount.toInt()} ($percentage%)", fontWeight = FontWeight.Bold, color = GoldLight, fontSize = 13.sp)
                                     }
                                     Spacer(modifier = Modifier.height(6.dp))
@@ -341,6 +399,18 @@ fun AnalysisScreen(
                 }
             }
         }
+    }
+
+    // UNIVERSAL LEDGER SHEET FOR CATEGORY / BUSINESS IN ANALYSIS
+    selectedLedgerTarget?.let { target ->
+        UniversalLedgerSheet(
+            target = target,
+            allExpenses = expenses,
+            onDismiss = { selectedLedgerTarget = null },
+            onDeleteExpense = { exp ->
+                onDeleteExpense?.invoke(exp)
+            }
+        )
     }
 }
 }

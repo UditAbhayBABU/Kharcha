@@ -60,6 +60,7 @@ fun HistoryScreen(
     var selectedPaymentFilter by remember { mutableStateOf<String?>(null) }
     var currentSort by remember { mutableStateOf(SortOption.NEWEST) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var selectedLedgerTarget by remember { mutableStateOf<LedgerTarget?>(null) }
 
     val dateFormat = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
 
@@ -361,12 +362,32 @@ fun HistoryScreen(
                                         onRestoreExpense(item)
                                     }
                                 }
+                            },
+                            onOpenLedger = {
+                                selectedLedgerTarget = LedgerTarget(
+                                    type = if (item.contextType == ContextType.BUSINESS && !item.businessName.isNullOrBlank()) LedgerType.BUSINESS else LedgerType.CATEGORY,
+                                    id = if (item.contextType == ContextType.BUSINESS && !item.businessName.isNullOrBlank()) (item.businessId ?: item.businessName!!) else item.category,
+                                    title = if (item.contextType == ContextType.BUSINESS && !item.businessName.isNullOrBlank()) item.businessName!! else "${item.category} Khata",
+                                    subtitle = if (item.contextType == ContextType.BUSINESS) "Business Passbook" else "Category Passbook"
+                                )
                             }
                         )
                     }
                 }
             }
         }
+    }
+
+    // UNIVERSAL LEDGER SHEET FROM HISTORY
+    selectedLedgerTarget?.let { target ->
+        UniversalLedgerSheet(
+            target = target,
+            allExpenses = expenses,
+            onDismiss = { selectedLedgerTarget = null },
+            onDeleteExpense = { exp ->
+                onDeleteExpense(exp)
+            }
+        )
     }
 }
 }
@@ -389,12 +410,15 @@ fun getCategoryIcon(name: String): androidx.compose.ui.graphics.vector.ImageVect
 fun ExpenseListItem(
     expense: Expense,
     dateFormat: SimpleDateFormat,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onOpenLedger: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     KharchaCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenLedger),
         isGlossy = true,
         backgroundColor = SurfaceCard
     ) {
@@ -536,7 +560,27 @@ fun ExpenseListItem(
             onDismissRequest = { showDeleteConfirm = false },
             containerColor = SurfaceElevated,
             title = { Text("Kharcha Hatana Hai?", color = TextPrimary, fontWeight = FontWeight.Bold) },
-            text = { Text("₹${expense.amount.toInt()} ka yeh kharcha delete ho jayega.", color = TextSecondary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("₹${expense.amount.toInt()} ka yeh kharcha delete ho jayega.", color = TextSecondary, fontSize = 13.sp)
+                    if (!expense.potName.isNullOrBlank()) {
+                        Text(
+                            text = "✓ Gullak (${expense.potName}) me ₹${expense.amount.toInt()} wapas jud jayenge.",
+                            color = EmeraldCash,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    if (!expense.udhaarPersonName.isNullOrBlank()) {
+                        Text(
+                            text = "✓ Udhaar party balance automatic normal ho jayega.",
+                            color = OrangeWarning,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false

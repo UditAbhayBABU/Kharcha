@@ -75,11 +75,13 @@ fun AppNavigation(
 
     val userId = currentUser?.uid ?: ""
 
-    // Seed default categories for this user once authenticated
+    // Seed default categories and auto-pull all cloud data for this user once authenticated
     LaunchedEffect(userId) {
         if (userId.isNotBlank()) {
             kharchaRepo.seedDefaultCategories(userId)
             authRepo.loadUserProfile(userId)
+            // Auto-sync: Push pending and pull all remote cloud expenses, pots & udhaar seamlessly
+            kharchaRepo.syncAllWithCloud(userId)
         }
     }
 
@@ -173,7 +175,7 @@ fun AppNavigation(
                 coroutineScope.launch {
                     val result = authRepo.signInWithEmail(email, pass)
                     authLoading = false
-                    result.onFailure { authError = it.localizedMessage ?: "Login me samasya aayi" }
+                    result.onFailure { authError = authRepo.formatAuthErrorMessage(it) }
                 }
             },
             onSignUp = { email, pass, name ->
@@ -182,7 +184,7 @@ fun AppNavigation(
                 coroutineScope.launch {
                     val result = authRepo.signUpWithEmail(email, pass, name)
                     authLoading = false
-                    result.onFailure { authError = it.localizedMessage ?: "Registration fail hua" }
+                    result.onFailure { authError = authRepo.formatAuthErrorMessage(it) }
                 }
             },
             onForgotPassword = { email ->
@@ -233,7 +235,7 @@ fun AppNavigation(
                 containerColor = BackgroundDark,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
-                    if (currentScreen in listOf(Screen.History, Screen.QuickAdd, Screen.Udhaar, Screen.Pots, Screen.Analysis, Screen.Settings)) {
+                    if (currentScreen in listOf(Screen.History, Screen.QuickAdd, Screen.Udhaar, Screen.Pots, Screen.Settings)) {
                         KharchaBottomBar(
                             currentScreen = currentScreen,
                             onSelectScreen = {
@@ -251,8 +253,8 @@ fun AppNavigation(
                 Screen.Udhaar -> 1
                 Screen.QuickAdd -> 2
                 Screen.Pots -> 3
-                Screen.Analysis -> 4
-                Screen.Settings -> 5
+                Screen.Settings -> 4
+                Screen.Analysis -> 5
                 else -> 6
             }
         }
@@ -434,6 +436,14 @@ fun AppNavigation(
                                 subtitle = "Udhaar khata delete ho gaya"
                             )
                             coroutineScope.launch { kharchaRepo.deleteUdhaarParty(partyId) }
+                        },
+                        onDeleteUdhaarEntry = { entryId, partyId ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Entry Hatayi Gayi",
+                                subtitle = "Udhaar khate se entry delete ho gayi"
+                            )
+                            coroutineScope.launch { kharchaRepo.deleteUdhaarEntry(entryId, partyId) }
                         }
                     )
                 }
@@ -443,6 +453,7 @@ fun AppNavigation(
                     PotsScreen(
                         userId = userId,
                         pots = pots,
+                        allExpenses = expenses,
                         onAddPot = { pot ->
                             celebrationController.celebrate(
                                 type = CelebrationActionType.POT_CREATED,
@@ -467,18 +478,35 @@ fun AppNavigation(
                                 subtitle = "Pot band kar diya gaya"
                             )
                             coroutineScope.launch { kharchaRepo.deletePot(potId) }
+                        },
+                        onDeleteExpense = { exp ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Kharcha Hataya",
+                                subtitle = "₹${exp.amount.toInt()} wapas Gullak me restore hua"
+                            )
+                            coroutineScope.launch { kharchaRepo.deleteExpense(exp.id, userId) }
                         }
                     )
                 }
 
                 Screen.Analysis -> {
-                    BackHandler { currentScreen = Screen.History }
+                    BackHandler { currentScreen = Screen.Settings }
                     AnalysisScreen(
                         expenses = expenses,
                         budgets = budgets,
                         isBudgetFeatureEnabled = userProfile?.isBudgetFeatureEnabled == true,
                         pots = pots,
-                        udhaarParties = udhaarParties
+                        udhaarParties = udhaarParties,
+                        onNavigateBack = { currentScreen = Screen.Settings },
+                        onDeleteExpense = { exp ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Kharcha Hataya",
+                                subtitle = "₹${exp.amount.toInt()} delete hua"
+                            )
+                            coroutineScope.launch { kharchaRepo.deleteExpense(exp.id, userId) }
+                        }
                     )
                 }
 
@@ -497,6 +525,7 @@ fun AppNavigation(
                         onNavigateToSheetsSync = { currentScreen = Screen.SheetsSync },
                         onNavigateToExcelSync = { currentScreen = Screen.ExcelSync },
                         onNavigateToGoogleDriveAndSheets = { currentScreen = Screen.GoogleDriveAndSheets },
+                        onNavigateToAnalysis = { currentScreen = Screen.Analysis },
                         onNavigateToAdmin = {
                             coroutineScope.launch {
                                 adminUsers = com.example.data.remote.FirestoreSyncManager().getAllUsersForAdmin()
@@ -525,6 +554,7 @@ fun AppNavigation(
                     BusinessManagementScreen(
                         userId = userId,
                         businesses = businesses,
+                        allExpenses = expenses,
                         onAddBusiness = {
                             celebrationController.celebrate(
                                 type = CelebrationActionType.SETTINGS_SAVED,
@@ -541,7 +571,15 @@ fun AppNavigation(
                             )
                             coroutineScope.launch { kharchaRepo.deleteBusiness(it) }
                         },
-                        onNavigateBack = { currentScreen = Screen.Settings }
+                        onNavigateBack = { currentScreen = Screen.Settings },
+                        onDeleteExpense = { exp ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Kharcha Hataya",
+                                subtitle = "₹${exp.amount.toInt()} delete hua"
+                            )
+                            coroutineScope.launch { kharchaRepo.deleteExpense(exp.id, userId) }
+                        }
                     )
                 }
 
@@ -550,6 +588,7 @@ fun AppNavigation(
                     CategoryManagementScreen(
                         userId = userId,
                         categories = categories,
+                        allExpenses = expenses,
                         onAddCategory = {
                             celebrationController.celebrate(
                                 type = CelebrationActionType.SETTINGS_SAVED,
@@ -566,7 +605,15 @@ fun AppNavigation(
                             )
                             coroutineScope.launch { kharchaRepo.deleteCategory(it) }
                         },
-                        onNavigateBack = { currentScreen = Screen.Settings }
+                        onNavigateBack = { currentScreen = Screen.Settings },
+                        onDeleteExpense = { exp ->
+                            celebrationController.celebrate(
+                                type = CelebrationActionType.EXPENSE_DELETED,
+                                title = "Kharcha Hataya",
+                                subtitle = "₹${exp.amount.toInt()} delete hua"
+                            )
+                            coroutineScope.launch { kharchaRepo.deleteExpense(exp.id, userId) }
+                        }
                     )
                 }
 
@@ -842,7 +889,6 @@ fun KharchaBottomBar(
                     Triple(Screen.Udhaar, "Udhaar", Icons.Outlined.SwapHoriz),
                     Triple(Screen.QuickAdd, "Add", Icons.Default.Add),
                     Triple(Screen.Pots, "Gullak", Icons.Outlined.Savings),
-                    Triple(Screen.Analysis, "Hisab", Icons.Outlined.QueryStats),
                     Triple(Screen.Settings, "Settings", Icons.Outlined.Tune)
                 )
 

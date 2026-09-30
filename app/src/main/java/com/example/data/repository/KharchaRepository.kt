@@ -64,8 +64,8 @@ class KharchaRepository(
         dao.insertExpense(entity)
 
         // 2. If associated with a Pot, deduct from Pot
-        if (!expense.potId.isNullOrBlank()) {
-            val pot = dao.getPotById(expense.potId)
+        if (!expense.potId.isNullOrBlank() || !expense.potName.isNullOrBlank()) {
+            val pot = dao.findPot(expense.userId, expense.potId, expense.potName)
             if (pot != null) {
                 val updatedPot = pot.copy(
                     currentBalance = (pot.currentBalance - expense.amount).coerceAtLeast(0.0),
@@ -77,19 +77,20 @@ class KharchaRepository(
         }
 
         // 3. If associated with Udhaar party, update party ledger
-        if (!expense.udhaarPersonId.isNullOrBlank()) {
-            val party = dao.getUdhaarPartyById(expense.udhaarPersonId)
+        if (!expense.udhaarPersonId.isNullOrBlank() || !expense.udhaarPersonName.isNullOrBlank()) {
+            val party = dao.findUdhaarParty(expense.userId, expense.udhaarPersonId, expense.udhaarPersonName)
             if (party != null) {
                 val updatedParty = party.copy(totalGiven = party.totalGiven + expense.amount)
                 dao.insertUdhaarParty(updatedParty)
+                val entryId = "ud_exp_${expense.id}"
                 val entry = UdhaarEntry(
-                    id = "ud_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}",
-                    partyId = expense.udhaarPersonId,
+                    id = entryId,
+                    partyId = party.id,
                     userId = expense.userId,
                     amount = expense.amount,
                     isRepayment = false,
                     dateMillis = expense.dateMillis,
-                    note = expense.note
+                    note = expense.note.ifBlank { "Kharcha: ${expense.category}" }
                 )
                 dao.insertUdhaarEntry(UdhaarEntryEntity.fromDomain(entry))
                 repoScope.launch {
@@ -129,7 +130,37 @@ class KharchaRepository(
     }
 
     suspend fun deleteExpense(id: String, userId: String) {
-        dao.markExpensePendingDelete(id)
+        val expenseEntity = dao.getExpenseById(id)
+        if (expenseEntity != null) {
+            // 1. Rollback Pot balance if expense came from a Pot!
+            if (!expenseEntity.potId.isNullOrBlank() || !expenseEntity.potName.isNullOrBlank()) {
+                val pot = dao.findPot(userId, expenseEntity.potId, expenseEntity.potName)
+                if (pot != null) {
+                    val updatedPot = pot.copy(
+                        currentBalance = pot.currentBalance + expenseEntity.amount,
+                        totalSpent = (pot.totalSpent - expenseEntity.amount).coerceAtLeast(0.0)
+                    )
+                    dao.insertPot(updatedPot)
+                    repoScope.launch { firestoreSync.savePotToCloud(updatedPot.toDomain()) }
+                }
+            }
+
+            // 2. Rollback Udhaar party if expense was recorded as Udhaar given!
+            if (!expenseEntity.udhaarPersonId.isNullOrBlank() || !expenseEntity.udhaarPersonName.isNullOrBlank()) {
+                val party = dao.findUdhaarParty(userId, expenseEntity.udhaarPersonId, expenseEntity.udhaarPersonName)
+                if (party != null) {
+                    val updatedParty = party.copy(
+                        totalGiven = (party.totalGiven - expenseEntity.amount).coerceAtLeast(0.0)
+                    )
+                    dao.insertUdhaarParty(updatedParty)
+                    repoScope.launch { firestoreSync.saveUdhaarPartyToCloud(updatedParty.toDomain()) }
+                }
+                // Delete linked Udhaar entry
+                dao.deleteUdhaarEntryById("ud_exp_${expenseEntity.id}")
+            }
+        }
+
+        dao.deleteExpenseById(id)
         repoScope.launch {
             firestoreSync.syncPendingExpenses(userId, dao)
         }
@@ -194,6 +225,16 @@ class KharchaRepository(
         dao.deletePotById(id)
     }
 
+    suspend fun withdrawFromPot(potId: String, amount: Double) {
+        val pot = dao.getPotById(potId) ?: return
+        val updated = pot.copy(
+            currentBalance = (pot.currentBalance - amount).coerceAtLeast(0.0),
+            totalSpent = pot.totalSpent + amount
+        )
+        dao.insertPot(updated)
+        repoScope.launch { firestoreSync.savePotToCloud(updated.toDomain()) }
+    }
+
     // UDHAAR
     fun getUdhaarParties(userId: String): Flow<List<UdhaarParty>> {
         return dao.getAllUdhaarParties(userId).map { list -> list.map { it.toDomain() } }
@@ -236,6 +277,23 @@ class KharchaRepository(
 
     suspend fun deleteUdhaarParty(id: String) {
         dao.deleteUdhaarPartyById(id)
+    }
+
+    suspend fun deleteUdhaarEntry(entryId: String, partyId: String) {
+        val entry = dao.getUdhaarEntryById(entryId)
+        if (entry != null) {
+            val party = dao.getUdhaarPartyById(partyId)
+            if (party != null) {
+                val updatedParty = if (entry.isRepayment) {
+                    party.copy(totalReceived = (party.totalReceived - entry.amount).coerceAtLeast(0.0))
+                } else {
+                    party.copy(totalGiven = (party.totalGiven - entry.amount).coerceAtLeast(0.0))
+                }
+                dao.insertUdhaarParty(updatedParty)
+                repoScope.launch { firestoreSync.saveUdhaarPartyToCloud(updatedParty.toDomain()) }
+            }
+            dao.deleteUdhaarEntryById(entryId)
+        }
     }
 
     // BUDGETS
